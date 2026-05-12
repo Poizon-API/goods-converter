@@ -28,6 +28,14 @@ const SIZE_KEYS = ["size", "размер", "尺码"];
 const COLOR_KEYS = ["color", "цвет", "颜色"];
 const COLOR_NAME_KEYS = ["colorname", "color_name", "название цвета"];
 
+const TARGET_AUDIENCE_ALIASES: Record<string, string> = {
+  unisex: "Унисекс",
+  "uni-sex": "Унисекс",
+  uni: "Унисекс",
+  универсальный: "Унисекс",
+  унисекс: "Унисекс",
+};
+
 const COLOR_ALIASES: Record<string, string> = {
   black: "Черный",
   blue: "Синий",
@@ -227,7 +235,12 @@ export class AvitoFormatter implements FormatterAbstract {
       return "Мужчины";
     }
 
-    return product.gender;
+    const alias = TARGET_AUDIENCE_ALIASES[this.normalizeKey(product.gender)];
+    if (alias) {
+      return alias;
+    }
+
+    return undefined;
   }
 
   private isFemale(gender?: string): boolean {

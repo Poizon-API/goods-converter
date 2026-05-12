@@ -113,6 +113,48 @@ describe("Avito formatter", () => {
     );
   });
 
+  it("normalizes TargetAudience values via aliases", async () => {
+    const cases: Array<{ gender: string | undefined; expected: string | null }> = [
+      { gender: "unisex", expected: "Унисекс" },
+      { gender: "UNISEX", expected: "Унисекс" },
+      { gender: "универсальный", expected: "Унисекс" },
+      { gender: "мужской", expected: "Мужчины" },
+      { gender: "женский", expected: "Женщины" },
+      { gender: "unknown-value", expected: null },
+      { gender: undefined, expected: null },
+    ];
+
+    for (const { gender, expected } of cases) {
+      const stream = new PassThrough();
+      const product: Product = {
+        productId: 1,
+        variantId: 1,
+        title: "T",
+        description: "D",
+        categoryId: 1,
+        price: 100,
+        currency: Currency.RUB,
+        vat: Vat.VAT_20,
+        gender,
+      };
+
+      await formatter.format(stream, [product]);
+      const result = (await streamToBuffer(stream)).toString();
+
+      if (expected === null) {
+        expect(
+          result,
+          `gender=${gender ?? "<undefined>"} should not emit TargetAudience`,
+        ).not.toContain("<TargetAudience>");
+      } else {
+        expect(
+          result,
+          `gender=${gender} should map to ${expected}`,
+        ).toContain(`<TargetAudience>${expected}</TargetAudience>`);
+      }
+    }
+  });
+
   it("should exclude products with price 0", async () => {
     const stream = new PassThrough();
     await formatter.format(stream, [

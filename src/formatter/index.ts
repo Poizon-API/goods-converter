@@ -12,6 +12,7 @@ import { XMLFormatter } from "./XML.formatter";
 import { YMLFormatter } from "./YML.formatter";
 
 export * from "./formater.types";
+export * from "./Avito.schema";
 
 export const Formatters = {
   AvitoFormatter,

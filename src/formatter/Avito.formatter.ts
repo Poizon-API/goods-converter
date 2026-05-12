@@ -3,6 +3,18 @@ import { XMLBuilder } from "fast-xml-parser";
 import { type Product, type Category, type Brand } from "../types";
 import { writeWithDrain } from "../utils";
 import {
+  AVITO_AD_TYPE_VALUES,
+  AVITO_APPAREL_TYPE_VALUES,
+  AVITO_COLOR_VALUES,
+  AVITO_CONDITION_VALUES,
+  AVITO_GOODS_TYPE_VALUES,
+  AVITO_PRICE_LIMITS,
+  AVITO_TARGET_AUDIENCE_VALUES,
+  AVITO_TEXT_LIMITS,
+  type AvitoProductError,
+  type AvitoValidationError,
+} from "./Avito.schema";
+import {
   Extension,
   type AvitoFormatterOptions,
   type FormatterAbstract,
@@ -11,61 +23,9 @@ import {
 
 import { PassThrough, type Writable } from "stream";
 
-const DEFAULT_AVITO_OPTIONS: Required<AvitoFormatterOptions> = {
-  category: "Одежда, обувь, аксессуары",
-  goodsType: "Мужская обувь",
-  condition: "Новое",
-  adType: "Товар приобретен на продажу",
-  apparelType: "Кроссовки",
-  defaultBrand: "Без бренда",
-  defaultColor: "Белый",
-  defaultColorName: "Белый",
-  defaultSize: "42",
-  targetAudience: "",
-};
-
 const SIZE_KEYS = ["size", "размер", "尺码"];
 const COLOR_KEYS = ["color", "цвет", "颜色"];
 const COLOR_NAME_KEYS = ["colorname", "color_name", "название цвета"];
-
-const TARGET_AUDIENCE_ALIASES: Record<string, string> = {
-  unisex: "Унисекс",
-  "uni-sex": "Унисекс",
-  uni: "Унисекс",
-  универсальный: "Унисекс",
-  унисекс: "Унисекс",
-};
-
-const COLOR_ALIASES: Record<string, string> = {
-  black: "Черный",
-  blue: "Синий",
-  brown: "Коричневый",
-  green: "Зеленый",
-  grey: "Серый",
-  gray: "Серый",
-  orange: "Оранжевый",
-  pink: "Розовый",
-  purple: "Фиолетовый",
-  red: "Красный",
-  white: "Белый",
-  yellow: "Желтый",
-  бежевый: "Бежевый",
-  белый: "Белый",
-  голубой: "Голубой",
-  желтый: "Желтый",
-  зеленый: "Зеленый",
-  золотой: "Золотой",
-  коричневый: "Коричневый",
-  красный: "Красный",
-  мультиколор: "Мультиколор",
-  оранжевый: "Оранжевый",
-  розовый: "Розовый",
-  серебряный: "Серебряный",
-  серый: "Серый",
-  синий: "Синий",
-  фиолетовый: "Фиолетовый",
-  черный: "Черный",
-};
 
 interface AvitoImage {
   "@_url": string;
@@ -85,7 +45,7 @@ interface AvitoAd {
   Description: AvitoCdata;
   Category: string;
   Price: number;
-  Images?: AvitoImages;
+  Images: AvitoImages;
   GoodsType: string;
   Condition: string;
   AdType: string;
@@ -108,6 +68,15 @@ export class AvitoFormatter implements FormatterAbstract {
     _brands?: Brand[],
     options?: FormatterOptions,
   ): Promise<void> {
+    const avitoOptions = options?.avito;
+    if (!avitoOptions) {
+      throw new Error(
+        "AvitoFormatter requires `options.avito` with category/goodsType/" +
+          "condition/adType/apparelType",
+      );
+    }
+    this.validateOptions(avitoOptions);
+
     const result = new PassThrough();
     result.pipe(writableStream);
 
@@ -120,135 +89,236 @@ export class AvitoFormatter implements FormatterAbstract {
     });
 
     const resultWriter = writeWithDrain(result);
-    const avitoOptions = this.getOptions(options?.avito);
+    const errors: AvitoProductError[] = [];
 
     await resultWriter('<?xml version="1.0" encoding="UTF-8"?>\n');
     await resultWriter('<Ads formatVersion="3" target="Avito.ru">\n');
 
     for (const product of products) {
-      if (product.price === 0) continue;
-
+      const built = this.buildAd(product, avitoOptions);
+      if (built.errors.length > 0) {
+        const event: AvitoProductError = {
+          productId: product.productId,
+          errors: built.errors,
+        };
+        errors.push(event);
+        avitoOptions.onProductError?.(event);
+        continue;
+      }
       await resultWriter(
-        this.indent(builder.build({ Ad: this.getAd(product, avitoOptions) })) +
-          "\n",
+        this.indent(builder.build({ Ad: built.ad })) + "\n",
       );
     }
 
     result.end("</Ads>\n");
+
+    if (avitoOptions.failOnError && errors.length > 0) {
+      throw new Error(
+        `AvitoFormatter: ${errors.length} товаров не прошли валидацию`,
+      );
+    }
   }
 
-  private getOptions(
-    options?: AvitoFormatterOptions,
-  ): Required<AvitoFormatterOptions> {
-    return {
-      ...DEFAULT_AVITO_OPTIONS,
-      ...options,
-    };
+  private validateOptions(options: AvitoFormatterOptions): void {
+    if (
+      !AVITO_GOODS_TYPE_VALUES.includes(
+        options.goodsType as (typeof AVITO_GOODS_TYPE_VALUES)[number],
+      )
+    ) {
+      throw new Error(
+        `AvitoFormatter: goodsType="${options.goodsType}" не из справочника ` +
+          `${AVITO_GOODS_TYPE_VALUES.join(", ")}`,
+      );
+    }
+    if (
+      !AVITO_CONDITION_VALUES.includes(
+        options.condition as (typeof AVITO_CONDITION_VALUES)[number],
+      )
+    ) {
+      throw new Error(
+        `AvitoFormatter: condition="${options.condition}" не из справочника ` +
+          `${AVITO_CONDITION_VALUES.join(", ")}`,
+      );
+    }
+    if (
+      !AVITO_AD_TYPE_VALUES.includes(
+        options.adType as (typeof AVITO_AD_TYPE_VALUES)[number],
+      )
+    ) {
+      throw new Error(
+        `AvitoFormatter: adType="${options.adType}" не из справочника ` +
+          `${AVITO_AD_TYPE_VALUES.join(", ")}`,
+      );
+    }
+    if (
+      !AVITO_APPAREL_TYPE_VALUES.includes(
+        options.apparelType as (typeof AVITO_APPAREL_TYPE_VALUES)[number],
+      )
+    ) {
+      throw new Error(
+        `AvitoFormatter: apparelType="${options.apparelType}" не из справочника ` +
+          `${AVITO_APPAREL_TYPE_VALUES.join(", ")}`,
+      );
+    }
+    if (
+      options.targetAudience !== undefined &&
+      !AVITO_TARGET_AUDIENCE_VALUES.includes(
+        options.targetAudience as (typeof AVITO_TARGET_AUDIENCE_VALUES)[number],
+      )
+    ) {
+      throw new Error(
+        `AvitoFormatter: targetAudience="${options.targetAudience}" не из ` +
+          `справочника ${AVITO_TARGET_AUDIENCE_VALUES.join(", ")}`,
+      );
+    }
   }
 
-  private getAd(
+  private buildAd(
     product: Product,
-    options: Required<AvitoFormatterOptions>,
-  ): AvitoAd {
-    const rawColor = this.findParamValue(product, COLOR_KEYS);
-    const colorName = this.findParamValue(product, COLOR_NAME_KEYS) ?? rawColor;
+    options: AvitoFormatterOptions,
+  ): { ad: AvitoAd; errors: AvitoValidationError[] } {
+    const errors: AvitoValidationError[] = [];
+
+    const title = product.title?.trim() ?? "";
+    if (title.length < AVITO_TEXT_LIMITS.Title.min) {
+      errors.push({ field: "Title", value: title, reason: "missing" });
+    } else if (title.length > AVITO_TEXT_LIMITS.Title.max) {
+      errors.push({
+        field: "Title",
+        value: title,
+        reason: "too_long",
+        expected: AVITO_TEXT_LIMITS.Title,
+      });
+    }
+
+    const description = product.description ?? "";
+    if (description.length < AVITO_TEXT_LIMITS.Description.min) {
+      errors.push({
+        field: "Description",
+        value: description,
+        reason: "missing",
+      });
+    } else if (description.length > AVITO_TEXT_LIMITS.Description.max) {
+      errors.push({
+        field: "Description",
+        value: description,
+        reason: "too_long",
+        expected: AVITO_TEXT_LIMITS.Description,
+      });
+    }
+
+    const price = product.price ?? 0;
+    if (
+      typeof price !== "number" ||
+      price < AVITO_PRICE_LIMITS.min ||
+      price > AVITO_PRICE_LIMITS.max
+    ) {
+      errors.push({
+        field: "Price",
+        value: price,
+        reason: "out_of_range",
+        expected: AVITO_PRICE_LIMITS,
+      });
+    }
+
     const images = this.getImages(product.images);
+    if (!images) {
+      errors.push({
+        field: "Images",
+        value: product.images,
+        reason: "empty_array",
+      });
+    }
+
+    const brand = product.vendor?.trim() ?? "";
+    if (brand.length < AVITO_TEXT_LIMITS.Brand.min) {
+      errors.push({ field: "Brand", value: brand, reason: "missing" });
+    } else if (brand.length > AVITO_TEXT_LIMITS.Brand.max) {
+      errors.push({
+        field: "Brand",
+        value: brand,
+        reason: "too_long",
+        expected: AVITO_TEXT_LIMITS.Brand,
+      });
+    }
+
+    const rawColor = this.findParamValue(product, COLOR_KEYS);
+    if (!rawColor) {
+      errors.push({ field: "Color", value: rawColor, reason: "missing" });
+    } else if (
+      !AVITO_COLOR_VALUES.includes(
+        rawColor as (typeof AVITO_COLOR_VALUES)[number],
+      )
+    ) {
+      errors.push({
+        field: "Color",
+        value: rawColor,
+        reason: "invalid_enum",
+        expected: AVITO_COLOR_VALUES,
+      });
+    }
+
+    const colorName =
+      this.findParamValue(product, COLOR_NAME_KEYS)?.trim() ?? "";
+    if (colorName.length < AVITO_TEXT_LIMITS.ColorName.min) {
+      errors.push({ field: "ColorName", value: colorName, reason: "missing" });
+    } else if (colorName.length > AVITO_TEXT_LIMITS.ColorName.max) {
+      errors.push({
+        field: "ColorName",
+        value: colorName,
+        reason: "too_long",
+        expected: AVITO_TEXT_LIMITS.ColorName,
+      });
+    }
+
+    const size = this.getSize(product);
+    if (!size) {
+      errors.push({ field: "Size", value: size, reason: "missing" });
+    }
 
     const ad: AvitoAd = {
       Id: product.variantId,
-      Title: product.title,
-      Description: {
-        __cdata: this.getSafeCdata(product.description),
-      },
+      Title: title,
+      Description: { __cdata: this.getSafeCdata(description) },
       Category: options.category,
-      Price: product.price,
-      Images: images,
-      GoodsType: this.getGoodsType(product, options),
+      Price: price,
+      Images: images ?? { Image: [] },
+      GoodsType: options.goodsType,
       Condition: options.condition,
       AdType: options.adType,
-      Brand: product.vendor ?? options.defaultBrand,
-      Color: rawColor ? this.normalizeColor(rawColor) : options.defaultColor,
-      ColorName: colorName ?? options.defaultColorName,
+      Brand: brand,
+      Color: rawColor ?? "",
+      ColorName: colorName,
       ApparelType: options.apparelType,
-      Size: this.getSize(product) ?? options.defaultSize,
+      Size: size ?? "",
     };
 
-    const targetAudience =
-      options.targetAudience || this.getTargetAudience(product);
-    if (targetAudience) {
-      ad.TargetAudience = targetAudience;
+    if (options.targetAudience) {
+      ad.TargetAudience = options.targetAudience;
     }
 
-    return ad;
+    return { ad, errors };
   }
 
   private getImages(images?: string[]): AvitoImages | undefined {
     const avitoImages = images
       ?.map((url) => url.trim())
-      .filter((url) => url.length > 0)
-      .map((url) => ({
-        "@_url": url,
-      }));
+      .filter((url) => url.length > 0 && this.isValidUrl(url))
+      .map((url) => ({ "@_url": url }));
 
     if (!avitoImages?.length) {
       return undefined;
     }
-
     return { Image: avitoImages };
   }
 
   private getSize(product: Product): string | undefined {
-    const paramSize = this.findParamValue(product, SIZE_KEYS);
-    if (paramSize) {
-      return paramSize;
-    }
+    const paramSize = this.findParamValue(product, SIZE_KEYS)?.trim();
+    if (paramSize) return paramSize;
 
     const size = product.sizes?.find((item) => item.value.trim().length > 0);
-    if (!size) {
-      return undefined;
-    }
-
+    if (!size) return undefined;
     return this.getFirstDelimitedValue(size.value, size.delimiter);
-  }
-
-  private getGoodsType(
-    product: Product,
-    options: Required<AvitoFormatterOptions>,
-  ): string {
-    if (this.isFemale(product.gender)) {
-      return "Женская обувь";
-    }
-
-    return options.goodsType;
-  }
-
-  private getTargetAudience(product: Product): string | undefined {
-    if (!product.gender) {
-      return undefined;
-    }
-
-    if (this.isFemale(product.gender)) {
-      return "Женщины";
-    }
-
-    if (this.isMale(product.gender)) {
-      return "Мужчины";
-    }
-
-    const alias = TARGET_AUDIENCE_ALIASES[this.normalizeKey(product.gender)];
-    if (alias) {
-      return alias;
-    }
-
-    return undefined;
-  }
-
-  private isFemale(gender?: string): boolean {
-    return this.normalizeKey(gender ?? "").includes("жен");
-  }
-
-  private isMale(gender?: string): boolean {
-    return this.normalizeKey(gender ?? "").includes("муж");
   }
 
   private findParamValue(
@@ -263,10 +333,6 @@ export class AvitoFormatter implements FormatterAbstract {
     )?.value;
   }
 
-  private normalizeColor(color: string): string {
-    return COLOR_ALIASES[this.normalizeKey(color)] ?? color;
-  }
-
   private normalizeKey(value: string): string {
     return value.trim().toLowerCase();
   }
@@ -278,6 +344,15 @@ export class AvitoFormatter implements FormatterAbstract {
 
   private getSafeCdata(value: string): string {
     return value.replaceAll("]]>", "]]]]><![CDATA[>");
+  }
+
+  private isValidUrl(value: string): boolean {
+    try {
+      const url = new URL(value);
+      return url.protocol === "http:" || url.protocol === "https:";
+    } catch {
+      return false;
+    }
   }
 
   private indent(value: string): string {

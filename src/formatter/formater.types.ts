@@ -21,6 +21,8 @@ export interface FormatterOptions {
   companyName?: string;
 
   splitParams?: boolean;
+
+  avito?: AvitoFormatterOptions;
 }
 
 export enum Extension {
@@ -29,4 +31,17 @@ export enum Extension {
   XML = "xml",
   XLSX = "xlsx",
   JSON = "json",
+}
+
+export interface AvitoFormatterOptions {
+  category?: string;
+  goodsType?: string;
+  condition?: string;
+  adType?: string;
+  apparelType?: string;
+  defaultBrand?: string;
+  defaultColor?: string;
+  defaultColorName?: string;
+  defaultSize?: string;
+  targetAudience?: string;
 }

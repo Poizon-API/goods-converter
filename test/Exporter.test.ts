@@ -114,6 +114,7 @@ describe("GoodsExporter", () => {
 
   it("should work with different formatters", async () => {
     const formatters = [
+      new Formatters.AvitoFormatter(),
       new Formatters.JSONFormatter(),
       new Formatters.CSVFormatter(),
       new Formatters.XMLFormatter(),

@@ -1,3 +1,4 @@
+import { AvitoFormatter } from "./Avito.formatter";
 import { CSVFormatter } from "./CSV.formatter";
 import { ExcelFormatter } from "./Excel.formatter";
 import { InsalesFormatter } from "./Insales.formatter";
@@ -13,6 +14,7 @@ import { YMLFormatter } from "./YML.formatter";
 export * from "./formater.types";
 
 export const Formatters = {
+  AvitoFormatter,
   TildaFormatter,
   CSVFormatter,
   InsalesFormatter,

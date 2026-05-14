@@ -5,10 +5,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Bagi4-source/goods-converter.git"
+    "url": "https://github.com/Poizon-API/goods-converter.git"
   },
   "bugs": {
-    "url": "https://github.com/Bagi4-source/goods-converter/issues"
+    "url": "https://github.com/Poizon-API/goods-converter/issues"
   },
   "name": "goods-exporter",
   "version": "2.0.0",

@@ -78,6 +78,13 @@ export interface AvitoCategorySchema {
   adTypeValues: readonly string[];
   /** Допустимые значения тега `<TargetAudience>` (опциональное поле). */
   targetAudienceValues: readonly string[];
+  /**
+   * XML-теги, которые формattер читает из `product.params` (а не из прямых
+   * полей `Product`). Это «mapping-поверхность» — потребители (например,
+   * export-api) разворачивают по этому списку UI mapping'а target-ключей.
+   * Для текущих sneakers-template'ов: Color, ColorName, Size.
+   */
+  paramTags: readonly string[];
   /** Лимиты длины для текстовых полей. */
   textLimits: {
     readonly Title: { readonly min: number; readonly max: number };

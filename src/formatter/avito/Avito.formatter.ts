@@ -47,6 +47,7 @@ interface AvitoAd {
   ApparelType: string;
   Size: string;
   TargetAudience?: string;
+  Address?: string;
 }
 
 type ImagesResult =
@@ -294,6 +295,9 @@ export class AvitoFormatter implements FormatterAbstract {
 
     if (options.targetAudience) {
       ad.TargetAudience = options.targetAudience;
+    }
+    if (options.address) {
+      ad.Address = options.address;
     }
 
     return { ad, errors };

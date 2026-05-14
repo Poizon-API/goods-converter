@@ -29,7 +29,9 @@
     "test": "vitest",
     "lint": "eslint --ext .ts --fix",
     "test-ui": "vitest --ui",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "schema:fetch": "ts-node scripts/fetch-avito-schema.ts",
+    "schema:check": "ts-node scripts/fetch-avito-schema.ts --check"
   },
   "keywords": [
     "stream",

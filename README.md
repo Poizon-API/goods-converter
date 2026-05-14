@@ -2,8 +2,8 @@
 
 [![npm version](https://img.shields.io/npm/v/goods-exporter)](https://www.npmjs.com/package/goods-exporter)
 ![npm](https://img.shields.io/npm/dm/goods-exporter)
-![GitHub issues](https://img.shields.io/github/issues/Bagi4-source/goods-converter)
-[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/Bagi4-source/goods-converter/blob/main/LICENSE)
+![GitHub issues](https://img.shields.io/github/issues/Poizon-API/goods-converter)
+[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/Poizon-API/goods-converter/blob/main/LICENSE)
 
 A versatile JavaScript library for exporting goods data to various formats such as YML, CSV, and Excel. Simplify data
 export tasks with ease.

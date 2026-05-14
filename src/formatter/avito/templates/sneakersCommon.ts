@@ -70,6 +70,12 @@ const SNEAKERS_TARGET_AUDIENCE_VALUES = [
   "Частные лица и бизнес",
 ] as const;
 
+// XML-теги, которые AvitoFormatter.buildParamIndex читает из product.params
+// (см. Avito.formatter.ts). Все остальные теги формируются из прямых полей
+// Product или из option'ов формattера. Если поведение buildParamIndex
+// меняется — синхронизировать этот список.
+const SNEAKERS_PARAM_TAGS = ["Color", "ColorName", "Size"] as const;
+
 const SNEAKERS_TEXT_LIMITS = {
   Title: { min: 1, max: 50 },
   Description: { min: 1, max: 7500 },
@@ -96,6 +102,7 @@ export function buildSneakersSchema(
     conditionValues: SNEAKERS_CONDITION_VALUES,
     adTypeValues: SNEAKERS_AD_TYPE_VALUES,
     targetAudienceValues: SNEAKERS_TARGET_AUDIENCE_VALUES,
+    paramTags: SNEAKERS_PARAM_TAGS,
     textLimits: SNEAKERS_TEXT_LIMITS,
   };
 }

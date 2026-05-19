@@ -15,7 +15,10 @@ import {
   type AvitoValidationError,
 } from "./shared";
 import { TEMPLATE_REGISTRY } from "./templates";
-import { type AvitoSneakersFormatterOptions } from "./types";
+import {
+  type AvitoSneakersFormatterOptions,
+  type AvitoTextOverflowPolicy,
+} from "./types";
 
 import { PassThrough, type Writable } from "stream";
 
@@ -209,10 +212,25 @@ export class AvitoFormatter implements FormatterAbstract {
       });
     }
 
-    const title = product.title?.trim() ?? "";
+    const rawTitle = product.title?.trim() ?? "";
+    const title = this.applyOverflowPolicy(
+      "Title",
+      rawTitle,
+      schema.textLimits.Title,
+      options.titleOverflowPolicy,
+    );
     this.validateTextField("Title", title, schema.textLimits.Title, errors);
 
-    const description = product.description ?? "";
+    // Whitespace-only description должен трактоваться как missing — иначе
+    // Avito реджектит ad на upload-стороне без понятной причины (наш
+    // validateTextField без trim'а пускает length=3).
+    const rawDescription = product.description?.trim() ?? "";
+    const description = this.applyOverflowPolicy(
+      "Description",
+      rawDescription,
+      schema.textLimits.Description,
+      options.descriptionOverflowPolicy,
+    );
     this.validateTextField(
       "Description",
       description,
@@ -301,6 +319,52 @@ export class AvitoFormatter implements FormatterAbstract {
     }
 
     return { ad, errors };
+  }
+
+  /**
+   * Возвращает значение для `validateTextField` согласно policy; throw'ит при
+   * `fail`. Лимит трактуется как UTF-16 code units (`.length` consistent c
+   * validateTextField). Truncate-ветка дополнительно сбрасывает trailing lone
+   * surrogate, если slice прошёл посередине pair'а — XML 1.0 §2.2 запрещает
+   * D800-DFFF в content, lone surrogate сделает фид невалидным.
+   */
+  private applyOverflowPolicy(
+    field: "Title" | "Description",
+    value: string,
+    limits: { readonly min: number; readonly max: number },
+    policy?: AvitoTextOverflowPolicy,
+  ): string {
+    if (value.length <= limits.max) return value;
+    switch (policy) {
+      case "truncate": {
+        let sliced = value.slice(0, limits.max);
+        const lastCode = sliced.charCodeAt(sliced.length - 1);
+        if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
+          sliced = sliced.slice(0, -1);
+        }
+        const wordBoundary = sliced.replace(/\s+\S*$/, "").trim();
+        // Non-empty guard: первое слово длиннее max'а даст пустой
+        // wordBoundary → fallback на sliced.trim() (грубо посреди слова,
+        // но лучше чем уронить товар на validateTextField=missing).
+        const fallback = sliced.trim();
+        return wordBoundary.length > 0 && wordBoundary.length >= limits.min
+          ? wordBoundary
+          : fallback;
+      }
+      case "fail":
+        // Без preview value — на текстовых полях легально лежит PII
+        // (телефоны/адреса), не тащим в Sentry/логи (CWE-209/532).
+        throw new Error(
+          `AvitoFormatter: ${field} length=${value.length} > max=${limits.max} (policy="fail")`,
+        );
+      case "skip":
+      case undefined:
+        return value;
+      default: {
+        const _exhaustive: never = policy;
+        return _exhaustive;
+      }
+    }
   }
 
   private validateTextField(

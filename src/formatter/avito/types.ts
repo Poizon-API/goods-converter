@@ -13,6 +13,26 @@ import { type AvitoProductError } from "./shared";
 export type SupportedTemplateId = 100368 | 100388;
 
 /**
+ * Что делать с текстовым полем, длина которого превышает `schema.textLimits`:
+ *   - `"truncate"` — обрезать по последней границе слова (fallback: грубо
+ *     `slice(0, max)`, если первое слово длиннее лимита). Товар идёт в фид.
+ *   - `"skip"` (default) — добавить `too_long` в `errors[]`; товар выпадает
+ *     из фида и репортится через `onProductError`. Совместимо с `failOnError`.
+ *   - `"fail"` — немедленный throw из `format(...)`. Жёсткий режим для CI/CD:
+ *     лучше упасть всем экспортом, чем уронить произвольный товар. Не зависит
+ *     от глобального `failOnError`.
+ *
+ * Runtime-tuple `AVITO_TEXT_OVERFLOW_VALUES` — для downstream-валидаторов
+ * (zod/class-validator), которым нужен массив литералов; тип производный.
+ */
+export const AVITO_TEXT_OVERFLOW_VALUES = [
+  "truncate",
+  "skip",
+  "fail",
+] as const;
+export type AvitoTextOverflowPolicy = (typeof AVITO_TEXT_OVERFLOW_VALUES)[number];
+
+/**
  * Опции форматтера для категорий типа «sneakers» в Avito (обувь, кеды,
  * кроссовки, слипоны — все template'ы со схемой Brand/ColorName/Size/
  * GoodsType/ApparelType/Condition/AdType). Если когда-нибудь добавится
@@ -57,6 +77,10 @@ export interface AvitoSneakersFormatterOptions {
    * false: невалидные товары пропускаются и репортятся через `onProductError`.
    */
   failOnError?: boolean;
+  /** Default: `"skip"`. См. `AvitoTextOverflowPolicy`. */
+  titleOverflowPolicy?: AvitoTextOverflowPolicy;
+  /** Default: `"skip"`. См. `AvitoTextOverflowPolicy`. */
+  descriptionOverflowPolicy?: AvitoTextOverflowPolicy;
   /** Callback на каждый невалидный товар. */
   onProductError?: (event: AvitoProductError) => void;
 }

@@ -489,6 +489,153 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(err?.expected).toEqual(SCHEMA_100368.textLimits.Description);
   });
 
+  it("titleOverflowPolicy=truncate режет по word-boundary (не посередине слова) и пускает товар в фид", async () => {
+    const { errors, onProductError } = collectErrors();
+    const title = "Кроссовки Nike Air Max 90 Triple Black Premium 2024 XX";
+    const result = await renderAvito([validProduct({ title })], {
+      ...baseOptions,
+      titleOverflowPolicy: "truncate",
+      onProductError,
+    });
+    expect(errors).toHaveLength(0);
+    const written = result.match(/<Title>(.*)<\/Title>/)?.[1] ?? "";
+    expect(written.length).toBeLessThanOrEqual(50);
+    expect(written.endsWith(" ")).toBe(false);
+    expect(written).not.toMatch(/Prem$|Premi$|Premiu$/);
+  });
+
+  it.each([
+    [50, false],
+    [51, true],
+  ])("titleOverflowPolicy=truncate: boundary length=%i → truncated=%s", async (len, truncated) => {
+    const { errors, onProductError } = collectErrors();
+    const result = await renderAvito(
+      [validProduct({ title: "a".repeat(len) })],
+      { ...baseOptions, titleOverflowPolicy: "truncate", onProductError },
+    );
+    expect(errors).toHaveLength(0);
+    const written = result.match(/<Title>(.*)<\/Title>/)?.[1] ?? "";
+    expect(written.length).toBe(truncated ? 50 : len);
+  });
+
+  it("titleOverflowPolicy=truncate fallback (первое слово > max) обрезает грубо, без потери товара", async () => {
+    const { errors, onProductError } = collectErrors();
+    const result = await renderAvito(
+      [validProduct({ title: "x".repeat(80) })],
+      { ...baseOptions, titleOverflowPolicy: "truncate", onProductError },
+    );
+    expect(errors).toHaveLength(0);
+    expect(result).toContain(`<Title>${"x".repeat(50)}</Title>`);
+  });
+
+  it("titleOverflowPolicy=truncate: emoji (surrogate pair) не разрезается посередине", async () => {
+    // 💚 = U+1F49A, в UTF-16 surrogate pair (2 code units), 1 code point.
+    // value.slice(0, 50) на код-юнитах оставил бы lone surrogate → invalid
+    // XML → Avito реджектит фид. Code-point-aware truncate не должен.
+    const { errors, onProductError } = collectErrors();
+    // 49 ASCII + 1 emoji = 50 code points = 51 UTF-16 code units. Слов нет
+    // (без пробелов) → попадаем в fallback-ветку sliced.trim().
+    const title = "x".repeat(49) + "💚";
+    const result = await renderAvito([validProduct({ title })], {
+      ...baseOptions,
+      titleOverflowPolicy: "truncate",
+      onProductError,
+    });
+    expect(errors).toHaveLength(0);
+    const written = result.match(/<Title>(.*)<\/Title>/)?.[1] ?? "";
+    // Никаких lone surrogates: каждый surrogate валиден только в паре.
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(written)).toBe(false);
+  });
+
+  it("titleOverflowPolicy=fail кидает throw синхронно (failOnError=false → всё равно throw)", async () => {
+    await expect(
+      renderAvito([validProduct({ title: "a".repeat(60) })], {
+        ...baseOptions,
+        failOnError: false,
+        titleOverflowPolicy: "fail",
+      }),
+    ).rejects.toThrow(/Title length=60 > max=50 \(policy="fail"\)/);
+  });
+
+  it("titleOverflowPolicy=fail throw НЕ включает preview пользовательского value (PII-safety)", async () => {
+    // CWE-209/532: длинные текстовые поля могут содержать PII (телефоны,
+    // адреса). Сообщение об ошибке уходит в Sentry/логи — не тащим туда raw.
+    const sensitive = "+7-905-123-45-67 paid card 4111111111111111 ".repeat(3);
+    await expect(
+      renderAvito([validProduct({ title: sensitive })], {
+        ...baseOptions,
+        titleOverflowPolicy: "fail",
+      }),
+    ).rejects.toThrow(
+      expect.objectContaining({
+        message: expect.not.stringContaining("+7-"),
+      }),
+    );
+  });
+
+  it.each([undefined, "skip" as const])(
+    "titleOverflowPolicy=%s сохраняет старое поведение: товар выпадает с too_long",
+    async (policy) => {
+      const { errors, onProductError } = collectErrors();
+      const opts: AvitoSneakersFormatterOptions = {
+        ...baseOptions,
+        onProductError,
+        titleOverflowPolicy: policy,
+      };
+      const result = await renderAvito(
+        [validProduct({ title: "a".repeat(60) })],
+        opts,
+      );
+      expect(errors[0]?.errors.find((e) => e.field === "Title")?.reason).toBe(
+        "too_long",
+      );
+      expect(result).not.toContain("<Ad>");
+    },
+  );
+
+  it("descriptionOverflowPolicy=truncate режет описание до max'а с word-boundary", async () => {
+    const { errors, onProductError } = collectErrors();
+    const limit = SCHEMA_100368.textLimits.Description.max;
+    // Заведомо длиннее лимита (на ~50 слов), состоит из «слов»: проверяем
+    // что обрезка прошла на пробеле, а не разрезала слово.
+    const description = "слово ".repeat(Math.ceil(limit / 6) + 50);
+    expect(description.length).toBeGreaterThan(limit);
+    const result = await renderAvito([validProduct({ description })], {
+      ...baseOptions,
+      descriptionOverflowPolicy: "truncate",
+      onProductError,
+    });
+    expect(errors).toHaveLength(0);
+    const written =
+      result.match(/<!\[CDATA\[([\s\S]*?)]]>/)?.[1] ?? "";
+    expect(written.length).toBeGreaterThan(0);
+    expect(written.length).toBeLessThanOrEqual(limit);
+    expect(written.endsWith(" ")).toBe(false);
+    expect(written).toMatch(/слово$/);
+  });
+
+  it("descriptionOverflowPolicy=fail кидает throw для длинного description", async () => {
+    const limit = SCHEMA_100368.textLimits.Description.max;
+    await expect(
+      renderAvito([validProduct({ description: "x".repeat(limit + 1) })], {
+        ...baseOptions,
+        descriptionOverflowPolicy: "fail",
+      }),
+    ).rejects.toThrow(/Description length=\d+ > max=\d+/);
+  });
+
+  it("whitespace-only description трактуется как missing — иначе Avito реджектит ad на upload-стороне", async () => {
+    const { errors, onProductError } = collectErrors();
+    const result = await renderAvito([validProduct({ description: "   " })], {
+      ...baseOptions,
+      onProductError,
+    });
+    expect(errors[0]?.errors.find((e) => e.field === "Description")?.reason).toBe(
+      "missing",
+    );
+    expect(result).not.toContain("<Ad>");
+  });
+
   it("reports Id as missing for non-positive or non-integer variantId", async () => {
     for (const variantId of [0, -1, 1.5]) {
       const { errors, onProductError } = collectErrors();

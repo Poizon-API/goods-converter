@@ -1,7 +1,7 @@
 {
-  "id": 100384,
-  "fetchedAt": "2026-05-21T20:04:32.308Z",
-  "nodeName": "Сапоги",
+  "id": 100398,
+  "fetchedAt": "2026-05-21T20:04:38.534Z",
+  "nodeName": "Спортивная обувь",
   "groups": [
     {
       "fields": [
@@ -645,18 +645,15 @@
           "required": false,
           "tag": "Model",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/171039/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100398/field/171039/values-xml",
           "values_title": "Одно из значений"
         },
         {
-          "dependency": [
-            "Обязательно, если поле Цвет от производителя заполнено"
-          ],
           "description": "Цвет",
           "example": "```xml\n<Color>Синий</Color>\n```",
           "id": 112674,
           "label": "Цвет",
-          "required": true,
+          "required": false,
           "tag": "Color",
           "type": "select",
           "values": [
@@ -715,19 +712,6 @@
           "values_title": "Одно из значений"
         },
         {
-          "dependency": [
-            "Применимо, если в поле Соединять это объявление с другими объявлениями указано значение 'Да'",
-            "Обязательно, если в поле Цвет указано значение 'Разноцветный'"
-          ],
-          "description": "Цвет от производителя \n\nУкажите уникальное название, если оно есть. Можно использовать дефисы и слеши",
-          "example": "```xml\n<ColorName>Принт горошек</ColorName>\n```",
-          "id": 163361,
-          "label": "Цвет от производителя",
-          "required": true,
-          "tag": "ColorName",
-          "type": "input"
-        },
-        {
           "description": "Материал основной части",
           "example": "```xml\n<MaterialsOdezhda>\n<Option>Атлас</Option>\n<Option>Велюр</Option>\n<Option>Овчина</Option>\n</MaterialsOdezhda>\n```",
           "id": 164867,
@@ -735,7 +719,7 @@
           "required": false,
           "tag": "MaterialsOdezhda",
           "type": "checkbox",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
+          "values_link": "/web/1/autoload/user-docs/category/100398/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
           "values_title": "Одно или несколько значений"
         },
         {
@@ -753,44 +737,6 @@
     {
       "fields": [
         {
-          "dependency": [
-            "Применимо, если в поле Состояние указано значение 'Новое с биркой'"
-          ],
-          "description": "Если хотите соединять это объявление с другими объявлениями о товаре, укажите в параметре «Да» или оставьте поле пустым.\n\nЕсли продаёте товар в одном варианте, укажите «Нет».\n[Подробнее о мультиобъявлениях](https://www.avito.ru/general/multiitem/)\n\n**Значение по умолчанию**\n — Да",
-          "example": "<MultiItem>Да</MultiItem>",
-          "id": 177956,
-          "label": "Соединять это объявление с другими объявлениями",
-          "required": false,
-          "tag": "MultiItem",
-          "type": "select",
-          "values": [
-            {
-              "value": "Да"
-            },
-            {
-              "value": "Нет"
-            }
-          ],
-          "values_title": "Одно из значений"
-        },
-        {
-          "dependency": [
-            "Применимо, если в поле Соединять это объявление с другими объявлениями указано значение 'Да'"
-          ],
-          "description": "Параметр нужно заполнить одинаково во всех объявлениях с разными вариантами товара. [Подробнее о мультиобъявлениях](https://www.avito.ru/general/multiitem/)\n\nМожно использовать название модели от производителя или любое, которое придумаете. Например, Air Max. Без указания параметров.\n\nНе используйте символы (#, -, /, *, + и другие), только буквы и цифры. Название мультиобъявления покупатели не увидят.",
-          "example": "```xml\n<MultiName>Air Max</MultiName>\n```",
-          "id": 163767,
-          "label": "Название мультиобъявления",
-          "required": false,
-          "tag": "MultiName",
-          "type": "input"
-        }
-      ],
-      "name": "Мультиобъявление"
-    },
-    {
-      "fields": [
-        {
           "description": "Вид одежды, обуви, аксессуаров",
           "example": "```xml\n<ApparelType>Туфли</ApparelType>\n```",
           "id": 118570,
@@ -800,7 +746,7 @@
           "type": "select",
           "values": [
             {
-              "value": "Сапоги"
+              "value": "Спортивная обувь"
             }
           ],
           "values_title": "Одно из значений"
@@ -818,7 +764,7 @@
           "required": true,
           "tag": "Size",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/115538/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100398/field/115538/values-xml",
           "values_title": "Одно из значений"
         }
       ],

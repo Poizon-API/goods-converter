@@ -1,7 +1,7 @@
 {
-  "id": 100384,
-  "fetchedAt": "2026-05-21T20:04:32.308Z",
-  "nodeName": "Сапоги",
+  "id": 100394,
+  "fetchedAt": "2026-05-21T20:04:36.835Z",
+  "nodeName": "Мокасины и лоферы",
   "groups": [
     {
       "fields": [
@@ -645,7 +645,7 @@
           "required": false,
           "tag": "Model",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/171039/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100394/field/171039/values-xml",
           "values_title": "Одно из значений"
         },
         {
@@ -735,7 +735,7 @@
           "required": false,
           "tag": "MaterialsOdezhda",
           "type": "checkbox",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
+          "values_link": "/web/1/autoload/user-docs/category/100394/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
           "values_title": "Одно или несколько значений"
         },
         {
@@ -800,7 +800,7 @@
           "type": "select",
           "values": [
             {
-              "value": "Сапоги"
+              "value": "Мокасины и лоферы"
             }
           ],
           "values_title": "Одно из значений"
@@ -818,7 +818,7 @@
           "required": true,
           "tag": "Size",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/115538/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100394/field/115538/values-xml",
           "values_title": "Одно из значений"
         }
       ],

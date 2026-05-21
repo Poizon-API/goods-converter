@@ -28,6 +28,29 @@ const SNEAKERS_REQUIRED_FIELDS = [
   "Title",
 ] as const;
 
+// Utility-обувь (спорт/рабочая/резиновая/домашняя): Avito-дока помечает Color
+// как optional и не объявляет ColorName в схеме вообще. Sync-тест требует
+// строгого соответствия snapshot'у; формattер всё равно пишет ColorName в XML
+// и Avito-валидатор это молча пропускает (эмпирически проверено через
+// xmlcheck/, см. docs/avito-templates-audit.md в export-api), поэтому
+// отдельный builder/AvitoAd-shape не нужен — достаточно убрать Color/ColorName
+// из requiredFields для drift-чека.
+const UTILITY_SHOES_REQUIRED_FIELDS = [
+  "AdType",
+  "Address",
+  "ApparelType",
+  "Brand",
+  "Category",
+  "Condition",
+  "Description",
+  "GoodsType",
+  "Id",
+  "Images",
+  "Price",
+  "Size",
+  "Title",
+] as const;
+
 const SNEAKERS_COLOR_VALUES = [
   "Красный",
   "Белый",
@@ -87,7 +110,16 @@ const SNEAKERS_TEXT_LIMITS = {
 export type SneakersTemplateOverrides = Pick<
   AvitoCategorySchema,
   "templateId" | "nodeName" | "goodsTypeValues" | "apparelTypeValues"
->;
+> & {
+  /**
+   * Для utility-обуви (спорт/рабочая/резиновая/домашняя): Avito-схема не
+   * требует Color/ColorName. Влияет ТОЛЬКО на `requiredFields` (drift-чек со
+   * snapshot'ом). XML-output формattера и валидация Color/ColorName на стороне
+   * `AvitoFormatter.buildAd` остаются прежними — Avito принимает наш sneakers-
+   * XML для этих template'ов без претензий (эмпирически проверено).
+   */
+  utilityShoes?: boolean;
+};
 
 /**
  * Собирает `AvitoCategorySchema` для sneakers-template'а: per-template поля
@@ -96,9 +128,12 @@ export type SneakersTemplateOverrides = Pick<
 export function buildSneakersSchema(
   overrides: SneakersTemplateOverrides,
 ): AvitoCategorySchema {
+  const { utilityShoes, ...rest } = overrides;
   return {
-    ...overrides,
-    requiredFields: SNEAKERS_REQUIRED_FIELDS,
+    ...rest,
+    requiredFields: utilityShoes
+      ? UTILITY_SHOES_REQUIRED_FIELDS
+      : SNEAKERS_REQUIRED_FIELDS,
     colorValues: SNEAKERS_COLOR_VALUES,
     conditionValues: SNEAKERS_CONDITION_VALUES,
     adTypeValues: SNEAKERS_AD_TYPE_VALUES,

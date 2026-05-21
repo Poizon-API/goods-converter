@@ -1,7 +1,7 @@
 {
-  "id": 100384,
-  "fetchedAt": "2026-05-21T20:04:32.308Z",
-  "nodeName": "Сапоги",
+  "id": 100369,
+  "fetchedAt": "2026-05-21T20:04:25.503Z",
+  "nodeName": "Ботинки и полуботинки",
   "groups": [
     {
       "fields": [
@@ -579,7 +579,7 @@
           "type": "select",
           "values": [
             {
-              "value": "Женская обувь"
+              "value": "Мужская обувь"
             }
           ],
           "values_title": "Одно из значений"
@@ -645,7 +645,7 @@
           "required": false,
           "tag": "Model",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/171039/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100369/field/171039/values-xml",
           "values_title": "Одно из значений"
         },
         {
@@ -735,7 +735,7 @@
           "required": false,
           "tag": "MaterialsOdezhda",
           "type": "checkbox",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
+          "values_link": "/web/1/autoload/user-docs/category/100369/field/164867/values-xml?tagActionExclude=0&valuesTags[]=muzhskaya_obuv",
           "values_title": "Одно или несколько значений"
         },
         {
@@ -792,33 +792,33 @@
       "fields": [
         {
           "description": "Вид одежды, обуви, аксессуаров",
-          "example": "```xml\n<ApparelType>Туфли</ApparelType>\n```",
-          "id": 118570,
+          "example": "```xml\n<ApparelType>Кроссовки</ApparelType>\n```",
+          "id": 118631,
           "label": "Вид одежды, обуви, аксессуаров",
           "required": true,
           "tag": "ApparelType",
           "type": "select",
           "values": [
             {
-              "value": "Сапоги"
+              "value": "Ботинки и полуботинки"
             }
           ],
           "values_title": "Одно из значений"
         }
       ],
-      "name": "Женская одежда"
+      "name": "Мужская одежда"
     },
     {
       "fields": [
         {
-          "description": "Размер. Женская обувь",
-          "example": "```xml\n<Size>34</Size>\n```",
-          "id": 115538,
+          "description": "Мужская обувь",
+          "example": "```xml\n<Size>36</Size>\n```",
+          "id": 115164,
           "label": "Размер",
           "required": true,
           "tag": "Size",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/115538/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100369/field/115164/values-xml",
           "values_title": "Одно из значений"
         }
       ],

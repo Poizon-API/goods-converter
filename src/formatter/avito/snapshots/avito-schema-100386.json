@@ -1,7 +1,7 @@
 {
-  "id": 100384,
-  "fetchedAt": "2026-05-21T20:04:32.308Z",
-  "nodeName": "Сапоги",
+  "id": 100386,
+  "fetchedAt": "2026-05-21T20:04:33.180Z",
+  "nodeName": "Ботильоны",
   "groups": [
     {
       "fields": [
@@ -645,7 +645,7 @@
           "required": false,
           "tag": "Model",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/171039/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100386/field/171039/values-xml",
           "values_title": "Одно из значений"
         },
         {
@@ -735,7 +735,7 @@
           "required": false,
           "tag": "MaterialsOdezhda",
           "type": "checkbox",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
+          "values_link": "/web/1/autoload/user-docs/category/100386/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
           "values_title": "Одно или несколько значений"
         },
         {
@@ -800,7 +800,7 @@
           "type": "select",
           "values": [
             {
-              "value": "Сапоги"
+              "value": "Ботильоны"
             }
           ],
           "values_title": "Одно из значений"
@@ -818,7 +818,7 @@
           "required": true,
           "tag": "Size",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100384/field/115538/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100386/field/115538/values-xml",
           "values_title": "Одно из значений"
         }
       ],
@@ -849,6 +849,41 @@
         }
       ],
       "name": "Целевая аудитория"
+    },
+    {
+      "fields": [
+        {
+          "description": "Вид каблука",
+          "example": "```xml\n<HeelsType>Классический</HeelsType>\n```",
+          "id": 196234,
+          "label": "Вид каблука",
+          "required": false,
+          "tag": "HeelsType",
+          "type": "select",
+          "values": [
+            {
+              "value": "Классический"
+            },
+            {
+              "value": "Платформа"
+            },
+            {
+              "value": "Шпилька"
+            },
+            {
+              "value": "Танкетка"
+            },
+            {
+              "value": "Без каблука"
+            },
+            {
+              "value": "Другой"
+            }
+          ],
+          "values_title": "Одно из значений"
+        }
+      ],
+      "name": "Ботильоны"
     }
   ],
   "externalValues": {}

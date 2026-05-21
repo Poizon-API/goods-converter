@@ -71,7 +71,12 @@ function extractRequiredTags(snap: AvitoTemplateSnapshot): string[] {
 // При добавлении нового id в union, _MissingIds = новый id, _COVERAGE_CHECK
 // перестанет компилироваться → разработчику нужно дописать сюда.
 const TEMPLATE_IDS: SupportedTemplateId[] = [
-  100368, 100370, 100372, 100378, 100384, 100388, 100389, 100392,
+  // Мужская обувь
+  100368, 100369, 100370, 100371, 100372, 100373, 100374, 100375, 100376,
+  100377, 100378, 100379, 100380, 100381,
+  // Женская обувь
+  100383, 100384, 100385, 100386, 100387, 100388, 100389, 100390, 100391,
+  100392, 100393, 100394, 100395, 100396, 100397, 100398, 100399,
 ];
 type _MissingIds = Exclude<SupportedTemplateId, (typeof TEMPLATE_IDS)[number]>;
 const _COVERAGE_CHECK: _MissingIds extends never ? true : never = true;

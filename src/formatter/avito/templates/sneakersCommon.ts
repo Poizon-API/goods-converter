@@ -23,6 +23,7 @@ const SNEAKERS_REQUIRED_FIELDS = [
   "GoodsType",
   "Id",
   "Images",
+  "Price",
   "Size",
   "Title",
 ] as const;

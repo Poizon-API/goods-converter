@@ -1,7 +1,7 @@
 {
-  "id": 100388,
-  "fetchedAt": "2026-05-21T19:27:42.562Z",
-  "nodeName": "Кроссовки и кеды",
+  "id": 100389,
+  "fetchedAt": "2026-05-21T19:27:42.982Z",
+  "nodeName": "Полусапоги",
   "groups": [
     {
       "fields": [
@@ -638,6 +638,17 @@
           "values_title": "Одно из значений"
         },
         {
+          "description": "Модель обуви",
+          "example": "```xml\n<Model>Ultra Boost</Model>\n```",
+          "id": 171039,
+          "label": "Модель",
+          "required": false,
+          "tag": "Model",
+          "type": "select",
+          "values_link": "/web/1/autoload/user-docs/category/100389/field/171039/values-xml",
+          "values_title": "Одно из значений"
+        },
+        {
           "dependency": [
             "Обязательно, если поле Цвет от производителя заполнено"
           ],
@@ -724,7 +735,7 @@
           "required": false,
           "tag": "MaterialsOdezhda",
           "type": "checkbox",
-          "values_link": "/web/1/autoload/user-docs/category/100388/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
+          "values_link": "/web/1/autoload/user-docs/category/100389/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
           "values_title": "Одно или несколько значений"
         },
         {
@@ -789,7 +800,7 @@
           "type": "select",
           "values": [
             {
-              "value": "Кроссовки и кеды"
+              "value": "Полусапоги"
             }
           ],
           "values_title": "Одно из значений"
@@ -807,7 +818,7 @@
           "required": true,
           "tag": "Size",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100388/field/115538/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100389/field/115538/values-xml",
           "values_title": "Одно из значений"
         }
       ],

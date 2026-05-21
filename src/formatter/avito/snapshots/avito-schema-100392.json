@@ -1,7 +1,7 @@
 {
-  "id": 100388,
-  "fetchedAt": "2026-05-21T19:27:42.562Z",
-  "nodeName": "Кроссовки и кеды",
+  "id": 100392,
+  "fetchedAt": "2026-05-21T19:27:43.389Z",
+  "nodeName": "Сабо и мюли",
   "groups": [
     {
       "fields": [
@@ -638,6 +638,17 @@
           "values_title": "Одно из значений"
         },
         {
+          "description": "Модель обуви",
+          "example": "```xml\n<Model>Ultra Boost</Model>\n```",
+          "id": 171039,
+          "label": "Модель",
+          "required": false,
+          "tag": "Model",
+          "type": "select",
+          "values_link": "/web/1/autoload/user-docs/category/100392/field/171039/values-xml",
+          "values_title": "Одно из значений"
+        },
+        {
           "dependency": [
             "Обязательно, если поле Цвет от производителя заполнено"
           ],
@@ -724,8 +735,26 @@
           "required": false,
           "tag": "MaterialsOdezhda",
           "type": "checkbox",
-          "values_link": "/web/1/autoload/user-docs/category/100388/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
+          "values_link": "/web/1/autoload/user-docs/category/100392/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
           "values_title": "Одно или несколько значений"
+        },
+        {
+          "description": "Тип носка",
+          "example": "```xml\n<ToeType>Открытый</ToeType>\n```",
+          "id": 196236,
+          "label": "Тип носка",
+          "required": false,
+          "tag": "ToeType",
+          "type": "select",
+          "values": [
+            {
+              "value": "Открытый"
+            },
+            {
+              "value": "Закрытый"
+            }
+          ],
+          "values_title": "Одно из значений"
         },
         {
           "description": "Видеофайл в виде:\n\n— прямых HTTP-ссылок, заканчивающихся на название формата загружаемого видео(**.mp4**, **.mov**, **.hevc**, **.webm**);\n\n— приватных или публичных ссылок на Яндекс Диск ([подробнее](https://www.avito.ru/autoload/documentation#yandexDiskPublicLinks)).\n\nДля формата XML ссылка на видео должна быть внутри CDATA.\n\nДлительность видео должна составлять от 5 секунд до 3 минут, а размер файла не должен превышать 500 МБ. Иначе видео не загрузится.\n\nДопустимые форматы видео: [MP4](https://en.wikipedia.org/wiki/MP4_file_format), [MOV](https://en.wikipedia.org/wiki/MOV), [HEVC](https://en.wikipedia.org/wiki/High_Efficiency_Video_Coding), [WebM](https://en.wikipedia.org/wiki/WebM).\n\nЗагруженный видеоролик будет проигрываться на первом месте в галерее на странице объявления. Также пользователи увидят видео в результатах поиска, но только первые 5 секунд.\n\nЗагрузка видео доступна в объявлениях, с включенной доставкой.",
@@ -789,7 +818,7 @@
           "type": "select",
           "values": [
             {
-              "value": "Кроссовки и кеды"
+              "value": "Сабо и мюли"
             }
           ],
           "values_title": "Одно из значений"
@@ -807,7 +836,7 @@
           "required": true,
           "tag": "Size",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100388/field/115538/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100392/field/115538/values-xml",
           "values_title": "Одно из значений"
         }
       ],

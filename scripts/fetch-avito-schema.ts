@@ -56,11 +56,15 @@ const SNAPSHOTS_DIR = path.join(
 
 /**
  * Avito autoload template IDs, на которые опирается библиотека.
- * 100368 — мужские кеды/кроссовки/слипоны.
- * 100388 — женские кроссовки и кеды.
+ * Мужская обувь: 100368 Кроссовки, 100370 Туфли, 100372 Сапоги и полусапоги,
+ *   100378 Сандалии.
+ * Женская обувь: 100384 Сапоги, 100388 Кроссовки и кеды, 100389 Полусапоги,
+ *   100392 Сабо и мюли.
  * Per-template схема — `src/formatter/avito/templates/<id>.ts`.
  */
-const TEMPLATE_IDS = [100368, 100388] as const;
+const TEMPLATE_IDS = [
+  100368, 100370, 100372, 100378, 100384, 100388, 100389, 100392,
+] as const;
 
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +

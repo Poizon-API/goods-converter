@@ -1,7 +1,7 @@
 {
-  "id": 100388,
-  "fetchedAt": "2026-05-21T19:27:42.562Z",
-  "nodeName": "Кроссовки и кеды",
+  "id": 100372,
+  "fetchedAt": "2026-05-21T19:27:41.194Z",
+  "nodeName": "Сапоги и полусапоги",
   "groups": [
     {
       "fields": [
@@ -579,7 +579,7 @@
           "type": "select",
           "values": [
             {
-              "value": "Женская обувь"
+              "value": "Мужская обувь"
             }
           ],
           "values_title": "Одно из значений"
@@ -635,6 +635,17 @@
           "tag": "Brand",
           "type": "select",
           "values_link": "https://avito.ru/web/1/catalogs/content/feed/brendy_fashion.xml",
+          "values_title": "Одно из значений"
+        },
+        {
+          "description": "Модель обуви",
+          "example": "```xml\n<Model>Ultra Boost</Model>\n```",
+          "id": 171039,
+          "label": "Модель",
+          "required": false,
+          "tag": "Model",
+          "type": "select",
+          "values_link": "/web/1/autoload/user-docs/category/100372/field/171039/values-xml",
           "values_title": "Одно из значений"
         },
         {
@@ -724,7 +735,7 @@
           "required": false,
           "tag": "MaterialsOdezhda",
           "type": "checkbox",
-          "values_link": "/web/1/autoload/user-docs/category/100388/field/164867/values-xml?tagActionExclude=0&valuesTags[]=zhenskaya_obuv",
+          "values_link": "/web/1/autoload/user-docs/category/100372/field/164867/values-xml?tagActionExclude=0&valuesTags[]=muzhskaya_obuv",
           "values_title": "Одно или несколько значений"
         },
         {
@@ -781,33 +792,33 @@
       "fields": [
         {
           "description": "Вид одежды, обуви, аксессуаров",
-          "example": "```xml\n<ApparelType>Туфли</ApparelType>\n```",
-          "id": 118570,
+          "example": "```xml\n<ApparelType>Кроссовки</ApparelType>\n```",
+          "id": 118631,
           "label": "Вид одежды, обуви, аксессуаров",
           "required": true,
           "tag": "ApparelType",
           "type": "select",
           "values": [
             {
-              "value": "Кроссовки и кеды"
+              "value": "Сапоги и полусапоги"
             }
           ],
           "values_title": "Одно из значений"
         }
       ],
-      "name": "Женская одежда"
+      "name": "Мужская одежда"
     },
     {
       "fields": [
         {
-          "description": "Размер. Женская обувь",
-          "example": "```xml\n<Size>34</Size>\n```",
-          "id": 115538,
+          "description": "Мужская обувь",
+          "example": "```xml\n<Size>36</Size>\n```",
+          "id": 115164,
           "label": "Размер",
           "required": true,
           "tag": "Size",
           "type": "select",
-          "values_link": "/web/1/autoload/user-docs/category/100388/field/115538/values-xml",
+          "values_link": "/web/1/autoload/user-docs/category/100372/field/115164/values-xml",
           "values_title": "Одно из значений"
         }
       ],

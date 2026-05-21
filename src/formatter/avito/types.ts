@@ -10,7 +10,15 @@ import { type AvitoProductError } from "./shared";
  *   3. Прописать в `templates/index.ts` (TEMPLATE_REGISTRY).
  *   4. Расширить union ниже.
  */
-export type SupportedTemplateId = 100368 | 100388;
+export type SupportedTemplateId =
+  | 100368
+  | 100370
+  | 100372
+  | 100378
+  | 100384
+  | 100388
+  | 100389
+  | 100392;
 
 /**
  * Что делать с текстовым полем, длина которого превышает `schema.textLimits`:

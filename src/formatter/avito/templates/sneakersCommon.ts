@@ -109,7 +109,11 @@ const SNEAKERS_TEXT_LIMITS = {
 
 export type SneakersTemplateOverrides = Pick<
   AvitoCategorySchema,
-  "templateId" | "nodeName" | "goodsTypeValues" | "apparelTypeValues"
+  | "templateId"
+  | "nodeName"
+  | "goodsTypeValues"
+  | "apparelTypeValues"
+  | "sizeValues"
 > & {
   /**
    * Для utility-обуви (спорт/рабочая/резиновая/домашняя): Avito-схема не

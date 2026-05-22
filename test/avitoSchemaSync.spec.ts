@@ -150,5 +150,22 @@ describe.each(TEMPLATE_IDS)(
         extractRequiredTags(snap),
       );
     });
+
+    // sizeValues — опциональное поле schema (см. AvitoCategorySchema.sizeValues).
+    // Чекаем drift только когда обе стороны заполнены. Если хоть одна пуста —
+    // it.skip с понятным reason'ом, чтобы reporter показал отдельной строкой
+    // (silent return скрывал недосып fetcher'а в зелёной массе).
+    const snapSize = snap.externalValues.Size ?? [];
+    const schemaSize = schema.sizeValues ?? [];
+    const skipReason =
+      snapSize.length === 0
+        ? "snapshot.externalValues.Size пуст — запусти pnpm schema:fetch"
+        : schemaSize.length === 0
+          ? "schema.sizeValues не задан — добавь в templates/<id>.ts"
+          : null;
+    const test = skipReason ? it.skip : it;
+    test(`sizeValues match Size enum from Avito${skipReason ? ` (${skipReason})` : ""}`, () => {
+      expect([...schemaSize].sort()).toEqual([...snapSize].sort());
+    });
   },
 );

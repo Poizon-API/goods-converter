@@ -35,7 +35,7 @@ interface AvitoImages {
 }
 
 interface AvitoAd {
-  Id: number;
+  Id: string;
   Title: string;
   Description: AvitoCdata;
   Category: string;
@@ -200,17 +200,7 @@ export class AvitoFormatter implements FormatterAbstract {
     const errors: AvitoValidationError[] = [];
     const paramIndex = this.buildParamIndex(product);
 
-    if (
-      typeof product.variantId !== "number" ||
-      !Number.isInteger(product.variantId) ||
-      product.variantId <= 0
-    ) {
-      errors.push({
-        field: "Id",
-        value: product.variantId,
-        reason: "missing",
-      });
-    }
+    const id = this.buildAvitoId(product, errors);
 
     const rawTitle = product.title?.trim() ?? "";
     const title = this.applyOverflowPolicy(
@@ -289,13 +279,28 @@ export class AvitoFormatter implements FormatterAbstract {
       errors,
     );
 
-    const size = this.getSize(product, paramIndex);
+    const rawSize = this.getSize(product, paramIndex);
+    // Avito ждёт `36,5` (запятая), а адаптеры/каталоги обычно отдают `36.5`
+    // (точка). Нормализуем replaceAll, чтобы мусорный multi-dot ('38.5.5') не
+    // протёк дальше с частично-заменённой точкой.
+    const size = rawSize?.replaceAll(".", ",");
     if (!size) {
       errors.push({ field: "Size", value: size, reason: "missing" });
+    } else if (
+      schema.sizeValues &&
+      schema.sizeValues.length > 0 &&
+      !isOneOf(size, schema.sizeValues)
+    ) {
+      errors.push({
+        field: "Size",
+        value: size,
+        reason: "invalid_enum",
+        expected: schema.sizeValues,
+      });
     }
 
     const ad: AvitoAd = {
-      Id: typeof product.variantId === "number" ? product.variantId : 0,
+      Id: id,
       Title: title,
       Description: { __cdata: this.getSafeCdata(description) },
       Category: options.category,
@@ -387,15 +392,48 @@ export class AvitoFormatter implements FormatterAbstract {
     if (!Array.isArray(images) || images.length === 0) {
       return { kind: "empty_array" };
     }
+    // Avito-валидатор отбивает дубли отдельным сообщением на каждое
+    // объявление; не полагаемся на upstream — дедупим у себя по trim'нутому
+    // url, чтобы и пробельные дубли отсеялись.
     const valid: AvitoImage[] = [];
+    const seen = new Set<string>();
     for (const raw of images) {
       if (typeof raw !== "string") continue;
       const url = raw.trim();
       if (url.length === 0 || !this.isValidUrl(url)) continue;
+      if (seen.has(url)) continue;
+      seen.add(url);
       valid.push({ "@_url": url });
     }
     if (valid.length === 0) return { kind: "invalid_url" };
     return { kind: "ok", images: { Image: valid } };
+  }
+
+  /**
+   * Composite <Id> = `${productId}-${variantId}`: Avito требует уникальный Id
+   * в фиде, а у нас variantId может совпадать между разными товарами (для
+   * GOAT-адаптера это размер). Обе части — positive integer; иначе товар
+   * отбраковывается reason'ом `missing` (старое поведение для variantId=0/-1/
+   * non-integer, плюс симметрично для productId).
+   */
+  private buildAvitoId(
+    product: Product,
+    errors: AvitoValidationError[],
+  ): string {
+    const isPositiveInt = (v: unknown): v is number =>
+      typeof v === "number" && Number.isInteger(v) && v > 0;
+    if (
+      !isPositiveInt(product.productId) ||
+      !isPositiveInt(product.variantId)
+    ) {
+      errors.push({
+        field: "Id",
+        value: `${product.productId}-${product.variantId}`,
+        reason: "missing",
+      });
+      return "";
+    }
+    return `${product.productId}-${product.variantId}`;
   }
 
   private getSize(

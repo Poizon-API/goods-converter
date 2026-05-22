@@ -11,7 +11,7 @@
     "url": "https://github.com/Poizon-API/goods-converter/issues"
   },
   "name": "goods-exporter",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "A versatile JavaScript library for exporting goods data to various formats such as YML, CSV, and Excel. Simplify data export tasks with ease. Supports streams.",
   "main": "./dist/cjs/index.cjs",
   "type": "module",
@@ -30,8 +30,8 @@
     "lint": "eslint --ext .ts --fix",
     "test-ui": "vitest --ui",
     "coverage": "vitest run --coverage",
-    "schema:fetch": "ts-node scripts/fetch-avito-schema.ts",
-    "schema:check": "ts-node scripts/fetch-avito-schema.ts --check"
+    "schema:fetch": "tsx scripts/fetch-avito-schema.ts",
+    "schema:check": "tsx scripts/fetch-avito-schema.ts --check"
   },
   "keywords": [
     "stream",
@@ -78,6 +78,7 @@
     "rollup-plugin-esbuild": "6.1.1",
     "ts-node": "10.9.2",
     "tsconfig-paths": "4.2.0",
+    "tsx": "4.22.3",
     "typescript": "5.5.4",
     "vitest": "2.0.5"
   },

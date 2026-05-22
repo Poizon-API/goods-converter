@@ -56,12 +56,9 @@ export type SupportedTemplateId =
  * Runtime-tuple `AVITO_TEXT_OVERFLOW_VALUES` — для downstream-валидаторов
  * (zod/class-validator), которым нужен массив литералов; тип производный.
  */
-export const AVITO_TEXT_OVERFLOW_VALUES = [
-  "truncate",
-  "skip",
-  "fail",
-] as const;
-export type AvitoTextOverflowPolicy = (typeof AVITO_TEXT_OVERFLOW_VALUES)[number];
+export const AVITO_TEXT_OVERFLOW_VALUES = ["truncate", "skip", "fail"] as const;
+export type AvitoTextOverflowPolicy =
+  (typeof AVITO_TEXT_OVERFLOW_VALUES)[number];
 
 /**
  * Опции форматтера для категорий типа «sneakers» в Avito (обувь, кеды,

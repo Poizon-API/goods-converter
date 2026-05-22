@@ -1,4 +1,5 @@
 import { type AvitoCategorySchema } from "../shared";
+import snapshot from "../snapshots/avito-schema-100374.json";
 import { buildSneakersSchema } from "./sneakersCommon";
 
 /**
@@ -15,4 +16,5 @@ export const SCHEMA: AvitoCategorySchema = buildSneakersSchema({
   goodsTypeValues: ["Мужская обувь"],
   apparelTypeValues: ["Спортивная обувь"],
   utilityShoes: true,
+  sizeValues: snapshot.externalValues.Size,
 });

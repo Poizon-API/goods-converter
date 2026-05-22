@@ -24,7 +24,7 @@ export class SimpleJSONFormatter implements FormatterAbstract {
     brands?: Brand[],
     _?: FormatterOptions,
   ): Promise<void> {
-    const groupedProduct = new Map<number, SimpleProduct>();
+    const groupedProduct = new Map<string, SimpleProduct>();
     products.forEach((product) => {
       if (product.parentId !== undefined) return;
       groupedProduct.set(product.variantId, {

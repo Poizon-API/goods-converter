@@ -23,7 +23,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -57,7 +57,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -67,7 +67,7 @@ describe("Price formatter", () => {
       },
       {
         productId: 1,
-        variantId: 112,
+        variantId: "112",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -106,7 +106,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -148,7 +148,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -189,7 +189,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -230,7 +230,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -240,7 +240,7 @@ describe("Price formatter", () => {
       },
       {
         productId: 2,
-        variantId: 222,
+        variantId: "222",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -284,7 +284,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -294,7 +294,7 @@ describe("Price formatter", () => {
       },
       {
         productId: 1,
-        variantId: 112,
+        variantId: "112",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -308,7 +308,7 @@ describe("Price formatter", () => {
       },
       {
         productId: 2,
-        variantId: 221,
+        variantId: "221",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -361,7 +361,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -384,7 +384,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 12345,
+        variantId: "12345",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -408,7 +408,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -442,7 +442,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -484,7 +484,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -507,7 +507,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -531,7 +531,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -547,7 +547,7 @@ describe("Price formatter", () => {
       },
       {
         productId: 1,
-        variantId: 112,
+        variantId: "112",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -588,7 +588,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -598,7 +598,7 @@ describe("Price formatter", () => {
       },
       {
         productId: 2,
-        variantId: 222,
+        variantId: "222",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -608,7 +608,7 @@ describe("Price formatter", () => {
       },
       {
         productId: 3,
-        variantId: 333,
+        variantId: "333",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -650,7 +650,7 @@ describe("Price formatter", () => {
     const products: Product[] = [
       {
         productId: 1,
-        variantId: 1,
+        variantId: "1",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -660,7 +660,7 @@ describe("Price formatter", () => {
       },
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -670,7 +670,7 @@ describe("Price formatter", () => {
       },
       {
         productId: 1,
-        variantId: 112,
+        variantId: "112",
         title: "Test",
         description: "Test",
         categoryId: 1,

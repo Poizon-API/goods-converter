@@ -59,13 +59,15 @@ export class PriceFormatter implements FormatterAbstract {
         return;
       }
 
-      if (product.variantId === productPrice.productId) {
-        // NOTE: Если это родитель, то он не является SKU
+      if (product.variantId === String(productPrice.productId)) {
+        // NOTE: Если это родитель, то он не является SKU. variantId — string
+        // (см. Product.variantId), productPrice.productId — number → сравнение
+        // через явный String() приведение, иначе всегда `false`.
         return;
       }
 
       const sku: PriceSku = {
-        skuId: String(product.variantId),
+        skuId: product.variantId,
         price: product.price,
         currency: product.currency,
         params: product.params,

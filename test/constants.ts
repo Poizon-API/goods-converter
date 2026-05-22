@@ -3,7 +3,7 @@ import { type Brand, type Category, Currency, type Product, Vat } from "src";
 export const products: Product[] = [
   {
     productId: 1,
-    variantId: 1111,
+    variantId: "1111",
     title: "Title",
     description: "Description",
     vendor: "Nike",
@@ -85,8 +85,8 @@ export const products: Product[] = [
   },
   {
     productId: 1,
-    parentId: 1111,
-    variantId: 1112,
+    parentId: "1111",
+    variantId: "1112",
     title: "Title",
     description: "Description",
     vendor: "Nike",

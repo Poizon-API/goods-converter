@@ -14,7 +14,7 @@ export interface Product {
    *
    * Пример: belaya-kofta-12345
    */
-  parentId?: number;
+  parentId?: string;
   /**
    * **SKU**
    *
@@ -22,7 +22,7 @@ export interface Product {
    *
    * Пример: belaya-kofta-12345
    */
-  variantId: number;
+  variantId: string;
   /**
    * **Название**
    *

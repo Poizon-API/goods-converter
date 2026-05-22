@@ -96,8 +96,8 @@ export class WooCommerceFormatter implements FormatterAbstract {
 
   private extractAttributes(products: Product[]) {
     const formatedProducts = this.formatProducts(products);
-    const paramsMap = new Map<number, Record<string, string | number>>();
-    const propertiesMap = new Map<number, Record<string, string | number>>();
+    const paramsMap = new Map<string, Record<string, string | number>>();
+    const propertiesMap = new Map<string, Record<string, string | number>>();
     const uniqueAttributes = new Map<string, number>();
 
     Object.values(this.CUSTOM_ATTRIBUTES).forEach((attrName) => {
@@ -236,12 +236,12 @@ export class WooCommerceFormatter implements FormatterAbstract {
     const attributes = this.extractAttributes(products);
 
     const variationsByParentId = new Map<
-      number,
+      string,
       Array<Record<string, string | number | undefined>>
     >();
 
-    const imagesByParentId = new Map<number, string | undefined>();
-    const sizesByParentId = new Map<number, string | undefined>();
+    const imagesByParentId = new Map<string, string | undefined>();
+    const sizesByParentId = new Map<string, string | undefined>();
 
     const variations = products.map((product, index) => {
       const pathsArray = categoryPaths
@@ -256,7 +256,7 @@ export class WooCommerceFormatter implements FormatterAbstract {
         Type: "variation",
         SKU: product.variantId,
         Name: product.title,
-        Parent: product.parentId ?? 0,
+        Parent: product.parentId ?? "0",
         "Short description": "",
         Description: product.description,
         Stock: product.count ?? 0,
@@ -294,7 +294,7 @@ export class WooCommerceFormatter implements FormatterAbstract {
       return row;
     });
 
-    const parentProducts = new Map<number, any>();
+    const parentProducts = new Map<string, any>();
 
     variations.forEach((product) => {
       const currentParent = parentProducts.get(product.Parent);

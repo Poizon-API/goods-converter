@@ -8,6 +8,8 @@ import {
   type FormatterOptions,
 } from "../formater.types";
 import {
+  AVITO_ID_MAX_LENGTH,
+  AVITO_ID_PART_PATTERN,
   AVITO_PRICE_LIMITS,
   isOneOf,
   type AvitoCategorySchema,
@@ -58,6 +60,21 @@ type ImagesResult =
   | { kind: "missing" }
   | { kind: "empty_array" }
   | { kind: "invalid_url" };
+
+/**
+ * Проверяет, что значение представимо как валидный сегмент Avito `<Id>`. Для
+ * number'ов дополнительно требуем positive integer — иначе ноль/отрицательные/
+ * float (`1.5` → "1.5" → `.` мимо whitelist'а, но семантически тоже missing)
+ * пропускались бы только по совпадению с regex. Stringified-форма прогоняется
+ * через whitelist всегда — это ловит `1e21` (`Number.isInteger` пропускает,
+ * но `String(1e21) === "1e+21"` с `+` не входит в whitelist).
+ */
+function isValidIdSegment(value: string | number): boolean {
+  if (typeof value === "number" && (!Number.isInteger(value) || value <= 0)) {
+    return false;
+  }
+  return AVITO_ID_PART_PATTERN.test(String(value));
+}
 
 export class AvitoFormatter implements FormatterAbstract {
   public formatterName = "Avito";
@@ -412,28 +429,39 @@ export class AvitoFormatter implements FormatterAbstract {
   /**
    * Composite <Id> = `${productId}-${variantId}`: Avito требует уникальный Id
    * в фиде, а у нас variantId может совпадать между разными товарами (для
-   * GOAT-адаптера это размер). Обе части — positive integer; иначе товар
-   * отбраковывается reason'ом `missing` (старое поведение для variantId=0/-1/
-   * non-integer, плюс симметрично для productId).
+   * GOAT-адаптера это размер). Avito-доку (snapshot.groups[].fields[Id]):
+   * до 100 знаков; допустимые символы — цифры, русские/английские буквы,
+   * а также `, \ / ( ) [ ] - =`. Подчёркивание `_` Avito не принимает.
+   * Сам разделитель `-` входит в whitelist, поэтому composite валиден если
+   * обе части тоже из whitelist'а и непустые.
+   *
+   * Валидация прогоняется по stringified-форме обеих частей: number'ы > 1e21
+   * (`Number.isInteger` пропускает, но `String(1e21) === "1e+21"` с `+` мимо
+   * whitelist'а) дали бы silent-pass на integer-проверке и mismatch с тем,
+   * что попадает в XML.
    */
   private buildAvitoId(
     product: Product,
     errors: AvitoValidationError[],
   ): string {
-    const isPositiveInt = (v: unknown): v is number =>
-      typeof v === "number" && Number.isInteger(v) && v > 0;
+    const composite = `${product.productId}-${product.variantId}`;
     if (
-      !isPositiveInt(product.productId) ||
-      !isPositiveInt(product.variantId)
+      !isValidIdSegment(product.productId) ||
+      !isValidIdSegment(product.variantId)
     ) {
+      errors.push({ field: "Id", value: composite, reason: "missing" });
+      return "";
+    }
+    if (composite.length > AVITO_ID_MAX_LENGTH) {
       errors.push({
         field: "Id",
-        value: `${product.productId}-${product.variantId}`,
-        reason: "missing",
+        value: composite,
+        reason: "too_long",
+        expected: { min: 1, max: AVITO_ID_MAX_LENGTH },
       });
       return "";
     }
-    return `${product.productId}-${product.variantId}`;
+    return composite;
   }
 
   private getSize(

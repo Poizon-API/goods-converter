@@ -156,7 +156,7 @@ describe("YML formatter", () => {
     const testProducts: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Free Product",
         description: "Test",
         categoryId: 1,
@@ -166,7 +166,7 @@ describe("YML formatter", () => {
       },
       {
         productId: 2,
-        variantId: 222,
+        variantId: "222",
         title: "Paid Product",
         description: "Test",
         categoryId: 1,
@@ -191,7 +191,7 @@ describe("YML formatter", () => {
     const testProducts: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Test",
         description: "Test",
         categoryId: 1,
@@ -220,7 +220,7 @@ describe("YML formatter", () => {
     const testProducts: Product[] = [
       {
         productId: 1,
-        variantId: 111,
+        variantId: "111",
         title: "Parent",
         description: "Test",
         categoryId: 1,
@@ -230,8 +230,8 @@ describe("YML formatter", () => {
       },
       {
         productId: 1,
-        parentId: 111,
-        variantId: 112,
+        parentId: "111",
+        variantId: "112",
         title: "Child",
         description: "Test",
         categoryId: 1,

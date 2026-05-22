@@ -9,6 +9,22 @@
  */
 export const AVITO_PRICE_LIMITS = { min: 1, max: 100_000_000 } as const;
 
+/**
+ * Лимит длины `<Id>` из Avito-доки (snapshot.groups[].fields[Id].description):
+ * «Всего — не более 100 знаков».
+ */
+export const AVITO_ID_MAX_LENGTH = 100;
+
+/**
+ * Допустимые символы в `<Id>` (из Avito-доки): цифры, английские и русские
+ * (кроме ё) буквы, плюс символы `, \ / ( ) [ ] - =`. Подчёркивание `_` НЕ
+ * входит. Регулярка проверяет одну часть composite-id (productId либо
+ * variantId по отдельности — соединительный `-` валиден внутри обеих частей,
+ * но для UX мы просто требуем, чтобы каждая часть была непустая и из
+ * whitelist'а).
+ */
+export const AVITO_ID_PART_PATTERN = /^[0-9A-Za-zА-Яа-я,\\/()[\]\-=]+$/u;
+
 export type AvitoValidationReason =
   | "missing"
   | "invalid_enum"

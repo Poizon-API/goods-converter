@@ -25,7 +25,7 @@ const baseOptions: AvitoSneakersFormatterOptions = {
 
 const validProduct = (overrides?: Partial<Product>): Product => ({
   productId: 1,
-  variantId: 11,
+  variantId: "11",
   title: "Nike Air Force 1",
   description: "Кроссовки Nike Air Force 1 White, мужские",
   categoryId: 1,
@@ -233,10 +233,10 @@ describe("AvitoFormatter (strict validator)", () => {
 
   it("skips invalid products but keeps valid ones in the same call", async () => {
     const { errors, onProductError } = collectErrors();
-    const good = validProduct({ productId: 1, variantId: 1 });
+    const good = validProduct({ productId: 1, variantId: "1" });
     const bad = validProduct({
       productId: 2,
-      variantId: 2,
+      variantId: "2",
       vendor: undefined,
     });
 
@@ -257,10 +257,10 @@ describe("AvitoFormatter (strict validator)", () => {
   it("throws on the very first invalid product when failOnError=true", async () => {
     const { errors, onProductError } = collectErrors();
     const products = [
-      validProduct({ productId: 1, variantId: 1 }),
+      validProduct({ productId: 1, variantId: "1" }),
       validProduct({
         productId: 2,
-        variantId: 2,
+        variantId: "2",
         vendor: undefined,
       }),
     ];
@@ -283,8 +283,8 @@ describe("AvitoFormatter (strict validator)", () => {
     // зелёной — promise всё равно reject'нется, но downstream закроется как
     // успешный upload. См. Avito.formatter.ts:121-123.
     const products = [
-      validProduct({ productId: 1, variantId: 1 }),
-      validProduct({ productId: 2, variantId: 2, vendor: undefined }),
+      validProduct({ productId: 1, variantId: "1" }),
+      validProduct({ productId: 2, variantId: "2", vendor: undefined }),
     ];
 
     const result = await renderAvitoWithStreamEvents(products, {
@@ -702,8 +702,10 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(result).not.toContain("<Ad>");
   });
 
-  it("reports Id as missing for non-positive or non-integer variantId", async () => {
-    for (const variantId of [0, -1, 1.5]) {
+  it("reports Id as missing for empty or disallowed-char variantId", async () => {
+    // Avito-доку: цифры, английские/русские (кроме ё) буквы, символы
+    // `, \ / ( ) [ ] - =`. Подчёркивание `_`, пробел, ё/Ё запрещены.
+    for (const variantId of ["", "abc_123", "v 1", "ёлка"]) {
       const { errors, onProductError } = collectErrors();
       await renderAvito([validProduct({ variantId })], {
         ...baseOptions,
@@ -713,6 +715,50 @@ describe("AvitoFormatter (strict validator)", () => {
       expect(err?.reason).toBe("missing");
     }
   });
+
+  it("reports Id as too_long when composite exceeds 100 chars", async () => {
+    const { errors, onProductError } = collectErrors();
+    // productId=1 (1 знак), `-` (1 знак), variantId 99 знаков → итого 101.
+    await renderAvito(
+      [validProduct({ productId: 1, variantId: "x".repeat(99) })],
+      { ...baseOptions, onProductError },
+    );
+    const err = errors[0].errors.find((e) => e.field === "Id");
+    expect(err?.reason).toBe("too_long");
+  });
+
+  it("accepts composite of exactly 100 chars (boundary)", async () => {
+    const { errors, onProductError } = collectErrors();
+    // productId=1, `-`, variantId 98 знаков → итого 100. Должно пройти.
+    const result = await renderAvito(
+      [validProduct({ productId: 1, variantId: "x".repeat(98) })],
+      { ...baseOptions, onProductError },
+    );
+    expect(errors).toEqual([]);
+    expect(result).toContain(`<Id>1-${"x".repeat(98)}</Id>`);
+  });
+
+  it.each([
+    "абв",
+    "size(M)",
+    "a,b",
+    "x=y",
+    "foo[bar]",
+    "a\\b",
+    "a/b",
+    "1-2-3",
+  ])(
+    "accepts Avito-whitelisted variantId %s (positive whitelist coverage)",
+    async (variantId) => {
+      const { errors, onProductError } = collectErrors();
+      const result = await renderAvito(
+        [validProduct({ productId: 1, variantId })],
+        { ...baseOptions, onProductError },
+      );
+      expect(errors).toEqual([]);
+      expect(result).toContain(`<Id>1-${variantId}</Id>`);
+    },
+  );
 
   it("reports Id as missing for non-positive or non-integer productId", async () => {
     for (const productId of [0, -1, 1.5]) {
@@ -731,9 +777,9 @@ describe("AvitoFormatter (strict validator)", () => {
     // composite Id два разных productId с одним размером дают одинаковый <Id>,
     // что валит Avito-загрузку как «Дубли ID объявлений».
     const products = [
-      validProduct({ productId: 100, variantId: 10 }),
-      validProduct({ productId: 200, variantId: 10 }),
-      validProduct({ productId: 300, variantId: 10 }),
+      validProduct({ productId: 100, variantId: "10" }),
+      validProduct({ productId: 200, variantId: "10" }),
+      validProduct({ productId: 300, variantId: "10" }),
     ];
     const result = await renderAvito(products, baseOptions);
     const ids = Array.from(result.matchAll(/<Id>([^<]+)<\/Id>/g)).map(
@@ -853,8 +899,8 @@ describe("AvitoFormatter (strict validator)", () => {
     await expect(
       renderAvito(
         [
-          validProduct({ productId: 1, variantId: 1, vendor: undefined }),
-          validProduct({ productId: 2, variantId: 2, vendor: undefined }),
+          validProduct({ productId: 1, variantId: "1", vendor: undefined }),
+          validProduct({ productId: 2, variantId: "2", vendor: undefined }),
         ],
         { ...baseOptions, onProductError },
       ),

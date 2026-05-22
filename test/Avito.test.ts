@@ -137,7 +137,7 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(result).toContain('<?xml version="1.0" encoding="UTF-8"?>');
     expect(result).toContain('<Ads formatVersion="3" target="Avito.ru">');
     expect(result).toContain("<Ad>");
-    expect(result).toContain("<Id>11</Id>");
+    expect(result).toContain("<Id>1-11</Id>");
     expect(result).toContain("<Title>Nike Air Force 1</Title>");
     expect(result).toContain("<Category>Одежда, обувь, аксессуары</Category>");
     expect(result).toContain("<Price>9990</Price>");
@@ -150,6 +150,68 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(result).toContain("<ColorName>Молочный белый</ColorName>");
     expect(result).toContain("<ApparelType>Кроссовки</ApparelType>");
     expect(result).toContain("<Size>42</Size>");
+  });
+
+  it("rejects Size out of Avito size dictionary as invalid_enum", async () => {
+    // Регрессия: GOAT-адаптер отдаёт US-размер (4..14), Avito ждёт EU
+    // (36..48+). Без валидации в фид улетал `<Size>10</Size>`, Avito-
+    // валидатор отбивал каждое объявление «Неправильно заполнен Размер».
+    const { errors, onProductError } = collectErrors();
+    const product = validProduct({
+      params: [
+        { key: "Size", value: "10" },
+        { key: "Color", value: "Белый" },
+        { key: "ColorName", value: "Молочный" },
+      ],
+    });
+    await renderAvito([product], { ...baseOptions, onProductError });
+    const sizeErr = errors[0].errors.find((e) => e.field === "Size");
+    expect(sizeErr?.reason).toBe("invalid_enum");
+    expect(sizeErr?.expected).toEqual(SCHEMA_100368.sizeValues);
+  });
+
+  it("normalizes Size '42.5' -> '42,5' before validation and in <Size>", async () => {
+    // Avito пишет десятичный разделитель как запятую (`42,5`), GOAT/POIZON
+    // обычно отдают точку. Нормализация — единая точка истины в formatter.
+    const result = await renderAvito(
+      [
+        validProduct({
+          params: [
+            { key: "Size", value: "42.5" },
+            { key: "Color", value: "Белый" },
+            { key: "ColorName", value: "Молочный" },
+          ],
+        }),
+      ],
+      baseOptions,
+    );
+    expect(result).toContain("<Size>42,5</Size>");
+    expect(result).not.toContain("<Size>42.5</Size>");
+  });
+
+  it("skips Size enum check when template's schema has no sizeValues (back-compat)", async () => {
+    // Шаблоны без выкаченного справочника (sizeValues=undefined) сейчас
+    // составляют большинство (28 из 30) — формattер должен пропускать в фид
+    // любой непустой размер, иначе мы сломаем выгрузку под не-обновлённые
+    // template'ы. 100369 (Ботинки и полуботинки) — без sizeValues.
+    const noSizesOptions: AvitoSneakersFormatterOptions = {
+      ...baseOptions,
+      templateId: 100369,
+      apparelType: "Ботинки и полуботинки",
+    };
+    const result = await renderAvito(
+      [
+        validProduct({
+          params: [
+            { key: "Size", value: "10" },
+            { key: "Color", value: "Белый" },
+            { key: "ColorName", value: "Молочный" },
+          ],
+        }),
+      ],
+      noSizesOptions,
+    );
+    expect(result).toContain("<Size>10</Size>");
   });
 
   it("rejects invalid color enum value via onProductError", async () => {
@@ -208,8 +270,8 @@ describe("AvitoFormatter (strict validator)", () => {
       onProductError,
     });
 
-    expect(result).toContain("<Id>1</Id>");
-    expect(result).not.toContain("<Id>2</Id>");
+    expect(result).toContain("<Id>1-1</Id>");
+    expect(result).not.toContain("<Id>2-2</Id>");
     // Точный assert «ровно один <Ad>» — count-substring сильнее, чем «не
     // contain Id>2», который случайно совпадает с productId/variantId
     // (легко сломать сменой фикстуры).
@@ -389,6 +451,29 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(errors).toHaveLength(0);
   });
 
+  it("deduplicates exact-match image urls (regression: Avito reports «одинаковые фото»)", async () => {
+    const url = "https://cdn.example.com/dup.jpg";
+    const product = validProduct({
+      images: [url, url, url, "https://cdn.example.com/u.jpg"],
+    });
+    const result = await renderAvito([product], baseOptions);
+    const matches = result.match(/<Image url="[^"]+"/g) ?? [];
+    expect(matches).toEqual([
+      `<Image url="${url}"`,
+      `<Image url="https://cdn.example.com/u.jpg"`,
+    ]);
+  });
+
+  it("treats whitespace-padded image url as duplicate of the trimmed one", async () => {
+    const url = "https://cdn.example.com/dup.jpg";
+    const product = validProduct({
+      images: [url, "  " + url + "  "],
+    });
+    const result = await renderAvito([product], baseOptions);
+    const matches = result.match(/<Image url="[^"]+"/g) ?? [];
+    expect(matches).toEqual([`<Image url="${url}"`]);
+  });
+
   it("escapes CDATA terminator in Description", async () => {
     const product = validProduct({
       description: "Текст с CDATA-terminator ]]> внутри",
@@ -507,16 +592,19 @@ describe("AvitoFormatter (strict validator)", () => {
   it.each([
     [50, false],
     [51, true],
-  ])("titleOverflowPolicy=truncate: boundary length=%i → truncated=%s", async (len, truncated) => {
-    const { errors, onProductError } = collectErrors();
-    const result = await renderAvito(
-      [validProduct({ title: "a".repeat(len) })],
-      { ...baseOptions, titleOverflowPolicy: "truncate", onProductError },
-    );
-    expect(errors).toHaveLength(0);
-    const written = result.match(/<Title>(.*)<\/Title>/)?.[1] ?? "";
-    expect(written.length).toBe(truncated ? 50 : len);
-  });
+  ])(
+    "titleOverflowPolicy=truncate: boundary length=%i → truncated=%s",
+    async (len, truncated) => {
+      const { errors, onProductError } = collectErrors();
+      const result = await renderAvito(
+        [validProduct({ title: "a".repeat(len) })],
+        { ...baseOptions, titleOverflowPolicy: "truncate", onProductError },
+      );
+      expect(errors).toHaveLength(0);
+      const written = result.match(/<Title>(.*)<\/Title>/)?.[1] ?? "";
+      expect(written.length).toBe(truncated ? 50 : len);
+    },
+  );
 
   it("titleOverflowPolicy=truncate fallback (первое слово > max) обрезает грубо, без потери товара", async () => {
     const { errors, onProductError } = collectErrors();
@@ -544,7 +632,11 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(errors).toHaveLength(0);
     const written = result.match(/<Title>(.*)<\/Title>/)?.[1] ?? "";
     // Никаких lone surrogates: каждый surrogate валиден только в паре.
-    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(written)).toBe(false);
+    expect(
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(
+        written,
+      ),
+    ).toBe(false);
   });
 
   it("titleOverflowPolicy=fail кидает throw синхронно (failOnError=false → всё равно throw)", async () => {
@@ -606,8 +698,7 @@ describe("AvitoFormatter (strict validator)", () => {
       onProductError,
     });
     expect(errors).toHaveLength(0);
-    const written =
-      result.match(/<!\[CDATA\[([\s\S]*?)]]>/)?.[1] ?? "";
+    const written = result.match(/<!\[CDATA\[([\s\S]*?)]]>/)?.[1] ?? "";
     expect(written.length).toBeGreaterThan(0);
     expect(written.length).toBeLessThanOrEqual(limit);
     expect(written.endsWith(" ")).toBe(false);
@@ -630,9 +721,9 @@ describe("AvitoFormatter (strict validator)", () => {
       ...baseOptions,
       onProductError,
     });
-    expect(errors[0]?.errors.find((e) => e.field === "Description")?.reason).toBe(
-      "missing",
-    );
+    expect(
+      errors[0]?.errors.find((e) => e.field === "Description")?.reason,
+    ).toBe("missing");
     expect(result).not.toContain("<Ad>");
   });
 
@@ -646,6 +737,35 @@ describe("AvitoFormatter (strict validator)", () => {
       const err = errors[0].errors.find((e) => e.field === "Id");
       expect(err?.reason).toBe("missing");
     }
+  });
+
+  it("reports Id as missing for non-positive or non-integer productId", async () => {
+    for (const productId of [0, -1, 1.5]) {
+      const { errors, onProductError } = collectErrors();
+      await renderAvito([validProduct({ productId })], {
+        ...baseOptions,
+        onProductError,
+      });
+      const err = errors[0].errors.find((e) => e.field === "Id");
+      expect(err?.reason).toBe("missing");
+    }
+  });
+
+  it("emits unique <Id> for variants sharing the same variantId across products", async () => {
+    // Регрессия на боевой баг (GOAT): variantId == size (число 4..14), и без
+    // composite Id два разных productId с одним размером дают одинаковый <Id>,
+    // что валит Avito-загрузку как «Дубли ID объявлений».
+    const products = [
+      validProduct({ productId: 100, variantId: 10 }),
+      validProduct({ productId: 200, variantId: 10 }),
+      validProduct({ productId: 300, variantId: 10 }),
+    ];
+    const result = await renderAvito(products, baseOptions);
+    const ids = Array.from(result.matchAll(/<Id>([^<]+)<\/Id>/g)).map(
+      (m) => m[1],
+    );
+    expect(ids).toEqual(["100-10", "200-10", "300-10"]);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it("falls back to product.sizes when params has no size", async () => {

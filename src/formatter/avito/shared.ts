@@ -92,4 +92,16 @@ export interface AvitoCategorySchema {
     readonly Brand: { readonly min: number; readonly max: number };
     readonly ColorName: { readonly min: number; readonly max: number };
   };
+  /**
+   * Справочник допустимых значений `<Size>` для template'а (см. `values_link`
+   * в `externalValues.Size` snapshot'а, пример URL для 100368:
+   * https://www.avito.ru/web/1/autoload/user-docs/category/100368/field/115164/values-xml).
+   * Запятая — десятичный разделитель Avito (`36,5`); formatter нормализует
+   * `.` → `,` перед проверкой.
+   *
+   * Если поле не задано (или пустой массив) — formatter сверку не делает,
+   * товар отбраковывается только при отсутствующем Size. Это back-compat
+   * для template'ов, чей справочник пока не выкачан.
+   */
+  sizeValues?: readonly string[];
 }

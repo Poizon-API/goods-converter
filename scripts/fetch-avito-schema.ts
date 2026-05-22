@@ -36,6 +36,8 @@
  * ```
  */
 
+import { XMLParser } from "fast-xml-parser";
+
 import {
   type AvitoFieldSnapshot,
   type AvitoTemplateSnapshot,
@@ -220,7 +222,10 @@ function extractEmbeddedJson(html: string): {
   return { groups: parsed.field_groups, nodeName };
 }
 
-async function fetchExternalValues(link: string): Promise<string[]> {
+async function fetchExternalValues(
+  tag: string,
+  link: string,
+): Promise<string[]> {
   const resolved = new URL(
     link.replace(/&amp;/g, "&"),
     "https://www.avito.ru/",
@@ -232,16 +237,28 @@ async function fetchExternalValues(link: string): Promise<string[]> {
     throw new Error(`untrusted values_link host: ${resolved.hostname}`);
   }
   const xml = await fetchHtml(resolved.toString());
-  const values = Array.from(xml.matchAll(/<value>([^<]+)<\/value>/g)).map(
-    (m) => m[1],
-  );
+  // Avito отдаёт `<{Tag}Values><{Tag}>v1</{Tag}>...</{Tag}Values>`
+  // (Size, MaterialsOdezhda, Model — все по одному паттерну). fast-xml-parser
+  // надёжнее regex'а: переживает whitespace/CDATA/новые поля без правок.
+  const parser = new XMLParser({
+    ignoreAttributes: true,
+    parseTagValue: false,
+    isArray: (name) => name === tag,
+  });
+  const parsed = parser.parse(xml) as Record<string, unknown>;
+  const rootKey = `${tag}Values`;
+  const root = parsed[rootKey] as Record<string, unknown> | undefined;
+  const raw = root?.[tag];
+  const values = Array.isArray(raw)
+    ? raw.filter((v): v is string => typeof v === "string" && v.length > 0)
+    : [];
   if (values.length === 0) {
     // Avito CDN иногда отдаёт 200 с HTML error-page'ом вместо XML — fetch не
-    // упадёт, regex молча даст []. В normal-run это сохранится как пустой
-    // массив и потом всплывёт как drift в --check. Падаем явно — пусть
-    // мейнтейнер увидит причину, а не «templates/<id>.ts разошлась со
-    // snapshot'ом».
-    throw new Error(`no <value> elements in ${resolved.toString()}`);
+    // упадёт, parser молча даст []. Падаем явно — пусть мейнтейнер увидит
+    // причину, а не «templates/<id>.ts разошлась со snapshot'ом».
+    throw new Error(
+      `no <${tag}> elements in <${rootKey}> at ${resolved.toString()}`,
+    );
   }
   return values;
 }
@@ -267,7 +284,7 @@ async function buildSnapshot(
   await Promise.all(
     pairs.map(async ({ tag, link }) => {
       try {
-        externalValues[tag] = await fetchExternalValues(link);
+        externalValues[tag] = await fetchExternalValues(tag, link);
       } catch (error) {
         const msg = `${id}/${tag}: не удалось скачать external values: ${String(error)}`;
         if (strict) {

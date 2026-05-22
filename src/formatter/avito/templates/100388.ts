@@ -1,4 +1,5 @@
 import { type AvitoCategorySchema } from "../shared";
+import snapshot from "../snapshots/avito-schema-100388.json";
 import { buildSneakersSchema } from "./sneakersCommon";
 
 /**
@@ -14,29 +15,5 @@ export const SCHEMA: AvitoCategorySchema = buildSneakersSchema({
   nodeName: "Кроссовки и кеды",
   goodsTypeValues: ["Женская обувь"],
   apparelTypeValues: ["Кроссовки и кеды"],
-  // Снято с avito.ru/web/1/autoload/user-docs/category/100388/field/115538/values-xml
-  // (женская обувь, 34..44+, шаг 0.5).
-  sizeValues: [
-    "34",
-    "34,5",
-    "35",
-    "35,5",
-    "36",
-    "36,5",
-    "37",
-    "37,5",
-    "38",
-    "38,5",
-    "39",
-    "39,5",
-    "40",
-    "40,5",
-    "41",
-    "41,5",
-    "42",
-    "42,5",
-    "43",
-    "43,5",
-    "44+",
-  ],
+  sizeValues: snapshot.externalValues.Size,
 });

@@ -1,4 +1,5 @@
 import { type AvitoCategorySchema } from "../shared";
+import snapshot from "../snapshots/avito-schema-100394.json";
 import { buildSneakersSchema } from "./sneakersCommon";
 
 /** Avito autoload template 100394 — «Мокасины и лоферы» (женская обувь). */
@@ -7,4 +8,5 @@ export const SCHEMA: AvitoCategorySchema = buildSneakersSchema({
   nodeName: "Мокасины и лоферы",
   goodsTypeValues: ["Женская обувь"],
   apparelTypeValues: ["Мокасины и лоферы"],
+  sizeValues: snapshot.externalValues.Size,
 });

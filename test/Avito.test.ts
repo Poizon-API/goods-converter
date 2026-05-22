@@ -189,31 +189,6 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(result).not.toContain("<Size>42.5</Size>");
   });
 
-  it("skips Size enum check when template's schema has no sizeValues (back-compat)", async () => {
-    // Шаблоны без выкаченного справочника (sizeValues=undefined) сейчас
-    // составляют большинство (28 из 30) — формattер должен пропускать в фид
-    // любой непустой размер, иначе мы сломаем выгрузку под не-обновлённые
-    // template'ы. 100369 (Ботинки и полуботинки) — без sizeValues.
-    const noSizesOptions: AvitoSneakersFormatterOptions = {
-      ...baseOptions,
-      templateId: 100369,
-      apparelType: "Ботинки и полуботинки",
-    };
-    const result = await renderAvito(
-      [
-        validProduct({
-          params: [
-            { key: "Size", value: "10" },
-            { key: "Color", value: "Белый" },
-            { key: "ColorName", value: "Молочный" },
-          ],
-        }),
-      ],
-      noSizesOptions,
-    );
-    expect(result).toContain("<Size>10</Size>");
-  });
-
   it("rejects invalid color enum value via onProductError", async () => {
     const { errors, onProductError } = collectErrors();
     const product = validProduct({

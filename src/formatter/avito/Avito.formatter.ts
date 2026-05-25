@@ -7,7 +7,10 @@ import {
   type FormatterAbstract,
   type FormatterOptions,
 } from "../formater.types";
-import { sanitizeAvitoDescription } from "./sanitizeDescription";
+import {
+  clampPartialHtml,
+  sanitizeAvitoDescription,
+} from "./sanitizeDescription";
 import {
   AVITO_ID_MAX_LENGTH,
   AVITO_ID_PART_PATTERN,
@@ -232,19 +235,21 @@ export class AvitoFormatter implements FormatterAbstract {
     // Whitespace-only description должен трактоваться как missing — иначе
     // Avito реджектит ad на upload-стороне без понятной причины (наш
     // validateTextField без trim'а пускает length=3).
-    //
-    // Sanitize ДО overflow-policy: sanitize-html выкидывает запрещённые
-    // теги и экранирует `<`/`&` в text-nodes, поэтому final-длина CDATA
-    // отличается от raw-длины в обе стороны. Чтобы truncate резал ту
-    // самую строку, которая попадёт в фид, считаем length после санитизации.
     const rawDescription = product.description?.trim() ?? "";
     const sanitizedDescription = sanitizeAvitoDescription(rawDescription);
-    const description = this.applyOverflowPolicy(
+    const truncatedDescription = this.applyOverflowPolicy(
       "Description",
       sanitizedDescription,
       schema.textLimits.Description,
       options.descriptionOverflowPolicy,
     );
+    // applyOverflowPolicy режет по символам без знания HTML — может
+    // оборвать тег `<p` или entity `&am` посередине. На стороне Avito
+    // CDATA-content декодится как HTML: оборванный тег ignored по
+    // eof-in-tag (whatwg.org/html parser), оборванный entity рендерится
+    // литералом. clampPartialHtml снимает trailing partial fragment;
+    // длина после clamp ≤ truncate, validateTextField проверит min.
+    const description = clampPartialHtml(truncatedDescription);
     this.validateTextField(
       "Description",
       description,
@@ -519,6 +524,12 @@ export class AvitoFormatter implements FormatterAbstract {
    * `]]>` нельзя экранировать внутри CDATA (XML 1.0 §2.7 запрещает nesting),
    * поэтому канонический трюк — разрыв секции: закрываем `]]>` и тут же
    * открываем новый `<![CDATA[>`. См. https://www.w3.org/TR/xml/#sec-cdata-sect
+   *
+   * Belt-and-suspenders: sanitizeAvitoDescription уже entity-эскейпит `>` →
+   * `&gt;` в text-nodes, поэтому literal `]]>` в normal-path до этого
+   * метода не доходит. Метод остаётся как защита на случай bypass'а
+   * санитизации (новый caller, edge-case в sanitize-html, и т.п.) — XML
+   * 1.0 §2.7 нарушение фатально для парсера, цена защиты — три строки.
    */
   private getSafeCdata(value: string): string {
     if (!value.includes("]]>")) return value;

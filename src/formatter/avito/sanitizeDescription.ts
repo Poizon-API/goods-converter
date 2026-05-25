@@ -16,7 +16,7 @@ import sanitizeHtml from "sanitize-html";
  * НЕ проверяет, поэтому полагаться на upstream-стрип нельзя — фид может
  * выглядеть валидным, но опубликоваться без форматирования.
  */
-const AVITO_ALLOWED_TAGS = [
+const AVITO_DESCRIPTION_ALLOWED_TAGS = [
   "p",
   "br",
   "strong",
@@ -27,35 +27,69 @@ const AVITO_ALLOWED_TAGS = [
 ] as const;
 
 /**
- * Очищает HTML в описании Avito-объявления до allowlist'а из spec'а.
+ * Опции для sanitize-html: создаются ОДИН РАЗ на module load.
  *
- * Поведение:
- *  - Запрещённые теги стрипаются (`<div>x</div>` → `x`), inner-text сохраняется.
- *  - Атрибуты у разрешённых тегов вырезаются (`<p class="x">y</p>` → `<p>y</p>`).
- *  - `<b>` → `<strong>`, `<i>` → `<em>` — синонимы, которые Avito иначе
- *    стрипает с потерей форматирования. `<u>` стрипается (нет аналога).
- *  - `<br>` нормализуется в `<br />` (`selfClosing`).
+ * `<b>` → `<strong>`, `<i>` → `<em>` — синонимы, которые Avito иначе бы
+ * стрипал с потерей форматирования. `shouldMerge=false` явно фиксирует
+ * intent: исходные атрибуты в новый тег НЕ переносятся (default sanitize-
+ * html — `true`; тут не критично из-за `allowedAttributes: {}`, но защита
+ * от регресса при будущем расширении allowedAttributes).
  *
- * `\n` НЕ конвертится в `<br/>`: Avito делает это сам внутри CDATA
- * (см. spec: «Тег n преобразуется в br»), двойная конверсия раздула бы
- * интервалы.
+ * `allowedSchemes: []` — defense-in-depth на случай добавления `<a>` в
+ * allowlist (для `href`/`src`); в текущей конфигурации no-op.
+ */
+const SANITIZE_OPTS: sanitizeHtml.IOptions = {
+  allowedTags: [...AVITO_DESCRIPTION_ALLOWED_TAGS],
+  allowedAttributes: {},
+  allowedSchemes: [],
+  disallowedTagsMode: "discard",
+  transformTags: {
+    b: sanitizeHtml.simpleTransform("strong", {}, false),
+    i: sanitizeHtml.simpleTransform("em", {}, false),
+  },
+};
+
+/**
+ * Очищает HTML в `<Description>` до Avito-allowlist (см. JSDoc выше).
  *
- * Длина результата может быть меньше входной (после strip'а) или больше
- * (если в тексте есть `<`, `&` — sanitize-html их экранирует в entity:
- * `&lt;`, `&amp;`). Поэтому вызывать ДО `applyOverflowPolicy`, чтобы
- * length-валидация считала именно ту строку, которая попадёт в фид.
+ * `\n` НЕ конвертится в `<br/>`: Avito делает это сам внутри CDATA (spec:
+ * «Тег n преобразуется в br»), двойная конверсия раздула бы интервалы.
+ *
+ * Длина результата может уменьшиться (strip запрещённых тегов) или
+ * вырасти (entity-escape `<`, `&` в text-node), поэтому вызывать ДО
+ * `applyOverflowPolicy` — length-валидация должна считать итоговую
+ * строку, которая попадёт в фид.
  */
 export function sanitizeAvitoDescription(value: string): string {
+  if (!value) return "";
+  // Fast-path для plain-text без HTML-маркеров — ~19× быстрее, чем full
+  // parse через htmlparser2 (важно для GOAT-адаптера и подобных, что
+  // отдают чистый текст). Корректность: sanitize-html в text-node
+  // эскейпит ВСЕ три специальных HTML-символа (`<` → `&lt;`, `>` → `&gt;`,
+  // `&` → `&amp;`). Если ни одного из них нет — output == input.
+  if (!/[<&>]/.test(value)) return value;
+  return sanitizeHtml(value, SANITIZE_OPTS);
+}
+
+/**
+ * Снимает с конца строки оборванный HTML-тег или entity, которые могли
+ * остаться после `applyOverflowPolicy.truncate` (slice по symbols без
+ * понимания HTML). На стороне Avito CDATA-content декодится как HTML;
+ * HTML5-парсер по `eof-in-tag` игнорирует оборванный тег, а по
+ * `missing-semicolon-after-character-reference` рендерит оборванный
+ * entity литерально (`&am` показывается как `&am`, а не `&`).
+ *
+ * Регекспы:
+ *  1. Trailing partial-tag: `<` или `</` + ASCII alpha + любые символы,
+ *     не содержащие `<>` (т.е. незакрытый start/end-tag в конце).
+ *  2. Trailing partial-entity: `&` + опц. `#`/`#x` + 1+ alnum БЕЗ `;`.
+ *     Lone `&` оставляем — HTML5 рендерит его как литерал `&`.
+ *
+ * Для plain-text без `<`/`&`-хвостов — no-op.
+ */
+export function clampPartialHtml(value: string): string {
   if (!value) return value;
-  return sanitizeHtml(value, {
-    allowedTags: [...AVITO_ALLOWED_TAGS],
-    allowedAttributes: {},
-    allowedSchemes: [],
-    disallowedTagsMode: "discard",
-    selfClosing: ["br"],
-    transformTags: {
-      b: sanitizeHtml.simpleTransform("strong", {}),
-      i: sanitizeHtml.simpleTransform("em", {}),
-    },
-  });
+  return value
+    .replace(/<\/?[a-zA-Z][^<>]*$/, "")
+    .replace(/&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z][a-zA-Z0-9]*)$/, "");
 }

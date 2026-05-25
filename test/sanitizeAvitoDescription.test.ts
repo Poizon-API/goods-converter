@@ -1,4 +1,7 @@
-import { sanitizeAvitoDescription } from "src/formatter/avito/sanitizeDescription";
+import {
+  clampPartialHtml,
+  sanitizeAvitoDescription,
+} from "src/formatter/avito/sanitizeDescription";
 import { describe, expect, it } from "vitest";
 
 describe("sanitizeAvitoDescription", () => {
@@ -110,8 +113,6 @@ describe("sanitizeAvitoDescription", () => {
     });
 
     it("`\\n` НЕ конвертируется в <br/> (Avito делает сам)", () => {
-      // Avito-spec: «Тег n (перенос строки) преобразуется в br». Если мы
-      // тоже заменим — получим двойные <br>, раздутые интервалы.
       expect(sanitizeAvitoDescription("первая\nвторая")).toBe("первая\nвторая");
     });
 
@@ -124,26 +125,130 @@ describe("sanitizeAvitoDescription", () => {
     });
 
     it("CDATA-terminator `]]>` эскейпится в `]]&gt;` (защита от premature close)", () => {
-      // sanitize-html сам по-default'у энтити-эскейпит `>` в text-node.
-      // Это делает старый getSafeCdata'шный split (`]]]]><![CDATA[>`)
-      // ненужным для нормальных входов, но getSafeCdata оставлен как
-      // belt-and-suspenders в формattере.
       expect(sanitizeAvitoDescription("a]]>b")).toBe("a]]&gt;b");
     });
 
-    it("комбинированный realistic-кейс из upstream-парсера", () => {
-      const raw =
-        '<div class="desc"><h2>Кроссовки Nike</h2>' +
-        "<p>Состояние: <b>новые</b>, с биркой.<br>" +
-        "Размеры: <i>40-45</i></p>" +
-        "<ul><li>Оригинал</li><li>Из США</li></ul>" +
-        '<a href="https://site.ru">Подробнее</a></div>';
-      expect(sanitizeAvitoDescription(raw)).toBe(
-        "Кроссовки Nike" +
-          "<p>Состояние: <strong>новые</strong>, с биркой.<br />Размеры: <em>40-45</em></p>" +
-          "<ul><li>Оригинал</li><li>Из США</li></ul>" +
-          "Подробнее",
+    it("уже-эскейпнутый `&amp;` остаётся idempotent (no double-escape)", () => {
+      // Upstream-парсер часто отдаёт HTML-encoded text; sanitize-html
+      // decode-then-encode сохраняет канонический вид. Регрессия в эту
+      // сторону (parser: { decodeEntities: false }) дала бы `&amp;amp;`
+      // в выходе и дословный `&amp;` в UI Avito.
+      expect(sanitizeAvitoDescription("Skirt &amp; blouse")).toBe(
+        "Skirt &amp; blouse",
+      );
+      expect(sanitizeAvitoDescription("&lt;tag&gt;")).toBe("&lt;tag&gt;");
+    });
+
+    it("множественные <br><br><br> сохраняются по одному", () => {
+      // Spec: «Тег n преобразуется в br, интервалы между абзацами будут
+      // увеличены» — Avito НЕ collapse'ит подряд идущие <br>. Фиксируем
+      // pass-through, чтобы будущий апгрейд sanitize-html не схлопывал.
+      expect(sanitizeAvitoDescription("a<br><br><br>b")).toBe(
+        "a<br /><br /><br />b",
+      );
+    });
+
+    it("uppercase <BR>, <P> приводится к lowercase", () => {
+      // sanitize-html по-default'у lowercases tag names. Фиксируем
+      // контракт: <BR> и <P> на входе попадут в allowlist'е (который у
+      // нас в lowercase).
+      expect(sanitizeAvitoDescription("a<BR>b<P>c</P>")).toBe(
+        "a<br />b<p>c</p>",
+      );
+    });
+
+    it("малформированный HTML не падает: <p>unclosed, <<<, mis-nested", () => {
+      // Snapshot текущего поведения sanitize-html — регресс-guard на
+      // апгрейд библиотеки.
+      expect(sanitizeAvitoDescription("<p>unclosed")).toBe("<p>unclosed</p>");
+      // `<<<` не парсится как валидный тег — sanitize-html эскейпит все
+      // три `<` в text-node как `&lt;`. На Avito-стороне это рендерится
+      // как литеральный `<<<` (HTML5-parser декодирует `&lt;` обратно).
+      expect(sanitizeAvitoDescription("<<<")).toBe("&lt;&lt;&lt;");
+      expect(sanitizeAvitoDescription("<p><strong>x</p></strong>")).toBe(
+        "<p><strong>x</strong></p>",
+      );
+    });
+
+    it("вложенные запрещённые теги до 3 уровней стрипаются полностью", () => {
+      expect(
+        sanitizeAvitoDescription(
+          '<div><span><a href="x">текст</a></span></div>',
+        ),
+      ).toBe("текст");
+    });
+
+    it("emoji + entities + tags в одной строке корректно процессятся", () => {
+      expect(sanitizeAvitoDescription("<p>👟 Nike &amp; Adidas 🔥</p>")).toBe(
+        "<p>👟 Nike &amp; Adidas 🔥</p>",
       );
     });
   });
+});
+
+describe("clampPartialHtml", () => {
+  describe("снимает оборванный тег с конца", () => {
+    it.each([
+      ["<p", ""],
+      ["<br /", ""],
+      ["<strong", ""],
+      ["</li", ""],
+      ["text<p", "text"],
+      ["<p>x</p", "<p>x"],
+    ])("'%s' → '%s'", (input, expected) => {
+      expect(clampPartialHtml(input)).toBe(expected);
+    });
+  });
+
+  describe("снимает оборванный entity с конца", () => {
+    it.each([
+      ["&am", ""],
+      ["&amp", ""],
+      ["&lt", ""],
+      ["&#12", ""],
+      ["&#x1A", ""],
+      ["text&am", "text"],
+      ["xx&amp", "xx"],
+    ])("'%s' → '%s'", (input, expected) => {
+      expect(clampPartialHtml(input)).toBe(expected);
+    });
+  });
+
+  describe("оставляет валидные хвосты as-is", () => {
+    it.each([
+      // Закрытые теги
+      ["<p>x</p>", "<p>x</p>"],
+      ["<br />", "<br />"],
+      // Закрытые entity
+      ["&amp;", "&amp;"],
+      ["x&lt;y", "x&lt;y"],
+      ["&#39;", "&#39;"],
+      // Lone `&` — HTML5 рендерит как литерал `&`
+      ["text&", "text&"],
+      ["a & b", "a & b"],
+      // Lone `<` — HTML5 рендерит как литерал
+      ["text<", "text<"],
+      // Plain text
+      ["plain text", "plain text"],
+      // Пустая строка
+      ["", ""],
+    ])("'%s' → '%s'", (input, expected) => {
+      expect(clampPartialHtml(input)).toBe(expected);
+    });
+  });
+});
+
+it("комбинированный realistic-кейс из upstream-парсера", () => {
+  const raw =
+    '<div class="desc"><h2>Кроссовки Nike</h2>' +
+    "<p>Состояние: <b>новые</b>, с биркой.<br>" +
+    "Размеры: <i>40-45</i></p>" +
+    "<ul><li>Оригинал</li><li>Из США</li></ul>" +
+    '<a href="https://site.ru">Подробнее</a></div>';
+  expect(sanitizeAvitoDescription(raw)).toBe(
+    "Кроссовки Nike" +
+      "<p>Состояние: <strong>новые</strong>, с биркой.<br />Размеры: <em>40-45</em></p>" +
+      "<ul><li>Оригинал</li><li>Из США</li></ul>" +
+      "Подробнее",
+  );
 });

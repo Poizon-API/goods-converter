@@ -7,6 +7,7 @@ import {
   type FormatterAbstract,
   type FormatterOptions,
 } from "../formater.types";
+import { sanitizeAvitoDescription } from "./sanitizeDescription";
 import {
   AVITO_ID_MAX_LENGTH,
   AVITO_ID_PART_PATTERN,
@@ -231,10 +232,16 @@ export class AvitoFormatter implements FormatterAbstract {
     // Whitespace-only description должен трактоваться как missing — иначе
     // Avito реджектит ad на upload-стороне без понятной причины (наш
     // validateTextField без trim'а пускает length=3).
+    //
+    // Sanitize ДО overflow-policy: sanitize-html выкидывает запрещённые
+    // теги и экранирует `<`/`&` в text-nodes, поэтому final-длина CDATA
+    // отличается от raw-длины в обе стороны. Чтобы truncate резал ту
+    // самую строку, которая попадёт в фид, считаем length после санитизации.
     const rawDescription = product.description?.trim() ?? "";
+    const sanitizedDescription = sanitizeAvitoDescription(rawDescription);
     const description = this.applyOverflowPolicy(
       "Description",
-      rawDescription,
+      sanitizedDescription,
       schema.textLimits.Description,
       options.descriptionOverflowPolicy,
     );

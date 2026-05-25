@@ -449,22 +449,30 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(matches).toEqual([`<Image url="${url}"`]);
   });
 
-  it("escapes CDATA terminator in Description", async () => {
+  it("escapes CDATA terminator in Description via entity encoding", async () => {
+    // С появлением sanitize-html в pipeline'е `]]>` в plain-text теперь
+    // становится `]]&gt;` ещё до getSafeCdata (sanitize-html по default'у
+    // эскейпит `>` → `&gt;` в text-nodes). Avito рендерит CDATA-content как
+    // HTML, поэтому `&gt;` декодится обратно в `>` на странице объявления.
+    // Инвариант безопасности сохранён: в выходном XML нет literal `]]>`,
+    // который преждевременно закрыл бы CDATA.
     const product = validProduct({
       description: "Текст с CDATA-terminator ]]> внутри",
     });
     const result = await renderAvito([product], baseOptions);
     expect(result).toContain(
-      "<![CDATA[Текст с CDATA-terminator ]]]]><![CDATA[> внутри]]>",
+      "<![CDATA[Текст с CDATA-terminator ]]&gt; внутри]]>",
     );
   });
 
-  it("escapes multiple CDATA terminators (regression: replaceAll vs replace)", async () => {
+  it("does not allow premature CDATA close on multiple terminators", async () => {
     const product = validProduct({
       description: "A ]]> B ]]> C ]]> D",
     });
     const result = await renderAvito([product], baseOptions);
-    expect(result.match(/]]]]><!\[CDATA\[>/g)?.length).toBe(3);
+    // Все три `]]>` в исходнике должны стать `]]&gt;` (entity-escaped через
+    // sanitize-html), а сама CDATA-секция закрыться ровно один раз в конце.
+    expect(result).toContain("<![CDATA[A ]]&gt; B ]]&gt; C ]]&gt; D]]>");
   });
 
   it("throws when category option is empty", async () => {
@@ -738,16 +746,7 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(result).toContain(`<Id>1-${"x".repeat(98)}</Id>`);
   });
 
-  it.each([
-    "абв",
-    "size(M)",
-    "a,b",
-    "x=y",
-    "foo[bar]",
-    "a\\b",
-    "a/b",
-    "1-2-3",
-  ])(
+  it.each(["абв", "size(M)", "a,b", "x=y", "foo[bar]", "a\\b", "a/b", "1-2-3"])(
     "accepts Avito-whitelisted variantId %s (positive whitelist coverage)",
     async (variantId) => {
       const { errors, onProductError } = collectErrors();

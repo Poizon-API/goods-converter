@@ -8,6 +8,10 @@ import {
   type FormatterOptions,
 } from "../formater.types";
 import {
+  clampPartialHtml,
+  sanitizeAvitoDescription,
+} from "./sanitizeDescription";
+import {
   AVITO_ID_MAX_LENGTH,
   AVITO_ID_PART_PATTERN,
   AVITO_PRICE_LIMITS,
@@ -232,12 +236,20 @@ export class AvitoFormatter implements FormatterAbstract {
     // Avito реджектит ad на upload-стороне без понятной причины (наш
     // validateTextField без trim'а пускает length=3).
     const rawDescription = product.description?.trim() ?? "";
-    const description = this.applyOverflowPolicy(
+    const sanitizedDescription = sanitizeAvitoDescription(rawDescription);
+    const truncatedDescription = this.applyOverflowPolicy(
       "Description",
-      rawDescription,
+      sanitizedDescription,
       schema.textLimits.Description,
       options.descriptionOverflowPolicy,
     );
+    // applyOverflowPolicy режет по символам без знания HTML — может
+    // оборвать тег `<p` или entity `&am` посередине. На стороне Avito
+    // CDATA-content декодится как HTML: оборванный тег ignored по
+    // eof-in-tag (whatwg.org/html parser), оборванный entity рендерится
+    // литералом. clampPartialHtml снимает trailing partial fragment;
+    // длина после clamp ≤ truncate, validateTextField проверит min.
+    const description = clampPartialHtml(truncatedDescription);
     this.validateTextField(
       "Description",
       description,
@@ -512,6 +524,12 @@ export class AvitoFormatter implements FormatterAbstract {
    * `]]>` нельзя экранировать внутри CDATA (XML 1.0 §2.7 запрещает nesting),
    * поэтому канонический трюк — разрыв секции: закрываем `]]>` и тут же
    * открываем новый `<![CDATA[>`. См. https://www.w3.org/TR/xml/#sec-cdata-sect
+   *
+   * Belt-and-suspenders: sanitizeAvitoDescription уже entity-эскейпит `>` →
+   * `&gt;` в text-nodes, поэтому literal `]]>` в normal-path до этого
+   * метода не доходит. Метод остаётся как защита на случай bypass'а
+   * санитизации (новый caller, edge-case в sanitize-html, и т.п.) — XML
+   * 1.0 §2.7 нарушение фатально для парсера, цена защиты — три строки.
    */
   private getSafeCdata(value: string): string {
     if (!value.includes("]]>")) return value;

@@ -449,22 +449,22 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(matches).toEqual([`<Image url="${url}"`]);
   });
 
-  it("escapes CDATA terminator in Description", async () => {
+  it("prevents premature CDATA close on `]]>` in Description", async () => {
     const product = validProduct({
       description: "Текст с CDATA-terminator ]]> внутри",
     });
     const result = await renderAvito([product], baseOptions);
     expect(result).toContain(
-      "<![CDATA[Текст с CDATA-terminator ]]]]><![CDATA[> внутри]]>",
+      "<![CDATA[Текст с CDATA-terminator ]]&gt; внутри]]>",
     );
   });
 
-  it("escapes multiple CDATA terminators (regression: replaceAll vs replace)", async () => {
+  it("prevents premature CDATA close on multiple `]]>` terminators", async () => {
     const product = validProduct({
       description: "A ]]> B ]]> C ]]> D",
     });
     const result = await renderAvito([product], baseOptions);
-    expect(result.match(/]]]]><!\[CDATA\[>/g)?.length).toBe(3);
+    expect(result).toContain("<![CDATA[A ]]&gt; B ]]&gt; C ]]&gt; D]]>");
   });
 
   it("throws when category option is empty", async () => {
@@ -690,6 +690,50 @@ describe("AvitoFormatter (strict validator)", () => {
     ).rejects.toThrow(/Description length=\d+ > max=\d+/);
   });
 
+  it("descriptionOverflowPolicy=truncate не оставляет оборванный тег в CDATA", async () => {
+    // Regress: до clampPartialHtml truncate'al sanitized HTML посередине
+    // тега (`<li>it`), на Avito-стороне HTML5-parser ignored по eof-in-tag,
+    // ломая разметку.
+    const limit = SCHEMA_100368.textLimits.Description.max;
+    const items = Math.ceil(limit / 16) + 100;
+    const description =
+      "<ul>" +
+      Array.from({ length: items }, (_, i) => `<li>item${i}</li>`).join("") +
+      "</ul>";
+    expect(description.length).toBeGreaterThan(limit);
+    const result = await renderAvito([validProduct({ description })], {
+      ...baseOptions,
+      descriptionOverflowPolicy: "truncate",
+    });
+    const written = result.match(/<!\[CDATA\[([\s\S]*?)]]>/)?.[1] ?? "";
+    expect(written.length).toBeGreaterThan(0);
+    expect(written.length).toBeLessThanOrEqual(limit);
+    // Оборванный start/end-tag (<li, </li, <p) не должен остаться:
+    expect(written).not.toMatch(/<\/?[a-zA-Z][^<>]*$/);
+  });
+
+  it("descriptionOverflowPolicy=truncate не оставляет оборванный entity в CDATA", async () => {
+    // Regress: sanitize-html эскейпит `&` в `&amp;` (+4 chars), и slice
+    // мог разрезать ровно посреди → `AAA&am` без `;`. На Avito-стороне
+    // HTML5-parser рендерит `&am` литерально вместо `&`.
+    const limit = SCHEMA_100368.textLimits.Description.max;
+    const segment = "AAAAA&";
+    const repeats = Math.ceil(limit / segment.length) + 50;
+    const description = "X".repeat(2) + segment.repeat(repeats);
+    expect(description.length).toBeGreaterThan(limit);
+    const result = await renderAvito([validProduct({ description })], {
+      ...baseOptions,
+      descriptionOverflowPolicy: "truncate",
+    });
+    const written = result.match(/<!\[CDATA\[([\s\S]*?)]]>/)?.[1] ?? "";
+    expect(written.length).toBeGreaterThan(0);
+    expect(written.length).toBeLessThanOrEqual(limit);
+    // Оборванный entity (`&am`, `&amp` без `;`) не должен остаться:
+    expect(written).not.toMatch(
+      /&(?:#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z][a-zA-Z0-9]*)$/,
+    );
+  });
+
   it("whitespace-only description трактуется как missing — иначе Avito реджектит ad на upload-стороне", async () => {
     const { errors, onProductError } = collectErrors();
     const result = await renderAvito([validProduct({ description: "   " })], {
@@ -738,16 +782,7 @@ describe("AvitoFormatter (strict validator)", () => {
     expect(result).toContain(`<Id>1-${"x".repeat(98)}</Id>`);
   });
 
-  it.each([
-    "абв",
-    "size(M)",
-    "a,b",
-    "x=y",
-    "foo[bar]",
-    "a\\b",
-    "a/b",
-    "1-2-3",
-  ])(
+  it.each(["абв", "size(M)", "a,b", "x=y", "foo[bar]", "a\\b", "a/b", "1-2-3"])(
     "accepts Avito-whitelisted variantId %s (positive whitelist coverage)",
     async (variantId) => {
       const { errors, onProductError } = collectErrors();

@@ -110,20 +110,25 @@ export function collapseAvitoVariantsByParam(
       result.push(group[0]);
       continue;
     }
-    // Safety: если ни у одного варианта нет paramKey — schrumpfung не имеет
-    // смысла, оставляем всё как есть. Иначе всю группу схлопнули бы в один
-    // ad с пустым описанием вариантов и потеряли информацию.
-    const haveAnyParam = group.some(
-      (p) => readParam(p, paramKey).length > 0,
-    );
-    if (!haveAnyParam) {
+    // Строим список «вариант-носитель paramKey + его цена» одним проходом
+    // (readParam — самая горячая операция файла, повторять её отдельным
+    // group.some() ради pre-check'а — лишний O(N) на группу).
+    const paramBearers = collectParamBearers(group, paramKey);
+    if (paramBearers.length === 0) {
+      // Без значения paramKey свёртка дала бы пустую таблицу — safer
+      // оставить N ad-ов (= поведение без флага), а не схлопнуть в один
+      // ad без перечня вариантов.
       result.push(...group);
       continue;
     }
 
-    const representative = pickMinPriceRepresentative(group);
+    // Min-price выбираем ТОЛЬКО среди param-bearers: иначе variant без
+    // paramKey мог бы стать представителем с low price'ом, но в таблице
+    // его не было бы — покупатель видел бы цену, не отражённую ни в одной
+    // строке варианта.
+    const representative = pickMinPriceRepresentative(paramBearers);
 
-    const rows = buildVariantRows(group, paramKey, sort);
+    const rows = buildVariantRows(paramBearers, sort);
 
     const appendix = renderVariantTable(
       rows,
@@ -133,16 +138,40 @@ export function collapseAvitoVariantsByParam(
       priceSuffix,
     );
 
-    const trimmedDescription = (representative.description ?? "").trim();
+    const trimmedDescription = (representative.product.description ?? "").trim();
     const description =
       trimmedDescription.length > 0
         ? trimmedDescription + separator + appendix
         : appendix;
 
-    result.push({ ...representative, description });
+    result.push({ ...representative.product, description });
   }
 
   return result;
+}
+
+/**
+ * Пара «вариант + его значение paramKey'а» — носитель, переживший фильтр
+ * `readParam`. Используется и для min-price selection, и для построения
+ * rows таблицы (общий источник истины, чтобы цена представителя совпадала
+ * с одной из строк описания).
+ */
+interface ParamBearer {
+  product: Product;
+  value: string;
+}
+
+function collectParamBearers(
+  group: Product[],
+  paramKey: string,
+): ParamBearer[] {
+  const bearers: ParamBearer[] = [];
+  for (const product of group) {
+    const value = readParam(product, paramKey);
+    if (value.length === 0) continue;
+    bearers.push({ product, value });
+  }
+  return bearers;
 }
 
 interface VariantRow {
@@ -153,56 +182,62 @@ interface VariantRow {
 }
 
 function buildVariantRows(
-  group: Product[],
-  paramKey: string,
+  bearers: ParamBearer[],
   sort: CollapseVariantsSort,
 ): VariantRow[] {
-  const rows: VariantRow[] = [];
-  for (const product of group) {
-    const value = readParam(product, paramKey);
-    if (value.length === 0) continue;
-    rows.push({
-      value,
-      price: product.price,
-      numeric: parseLocaleNumber(value),
-    });
-  }
-  return sortVariantRows(rows, sort);
+  const rows: VariantRow[] = bearers.map((bearer) => ({
+    value: bearer.value,
+    price: bearer.product.price,
+    numeric: parseLocaleNumber(bearer.value),
+  }));
+  sortVariantRows(rows, sort);
+  return rows;
 }
 
-function sortVariantRows(
-  rows: VariantRow[],
-  sort: CollapseVariantsSort,
-): VariantRow[] {
+function sortVariantRows(rows: VariantRow[], sort: CollapseVariantsSort): void {
   if (sort === "price-asc") {
-    return [...rows].sort((a, b) => a.price - b.price);
+    // NaN/Infinity всплывают в конец стабильно: при `a.price - b.price` NaN
+    // делает любую пару incomparable, но V8 sort стабилен, поэтому реальные
+    // позиции NaN-ов = их позиции в исходном массиве. Цены проходят
+    // valid'ацию в формaттере (out_of_range), так что в фид невалидная
+    // цена всё равно не уедет — паника тут излишняя.
+    rows.sort((a, b) => a.price - b.price);
+    return;
   }
-  const allNumeric =
-    sort === "value-numeric-asc" && rows.every((r) => Number.isFinite(r.numeric));
+  if (sort === "value-asc") {
+    // Plain lexical: '10' < '2' < '100' — без numeric-coercion. Отдельный
+    // mode для случаев, когда значение param — кодовое имя ('M', 'L', 'XL')
+    // и numeric-сравнение даст seemingly-random порядок.
+    rows.sort((a, b) => a.value.localeCompare(b.value, "ru"));
+    return;
+  }
+  // sort === "value-numeric-asc" (default): numeric, если все значения
+  // парсятся; иначе locale-aware с numeric option (умеет '36' < '36,5').
+  const allNumeric = rows.every((r) => Number.isFinite(r.numeric));
   if (allNumeric) {
-    return [...rows].sort((a, b) => a.numeric - b.numeric);
+    rows.sort((a, b) => a.numeric - b.numeric);
+    return;
   }
-  return [...rows].sort((a, b) =>
+  rows.sort((a, b) =>
     a.value.localeCompare(b.value, "ru", { numeric: true }),
   );
 }
 
 /**
- * Среди вариантов выбирается тот, у кого минимальная **положительная конечная**
- * цена. Не-real prices (NaN/Infinity/≤0) исключаются из соревнования.
- * Если real-prices нет вовсе — fallback на первый элемент группы (он же
- * потом будет отбракован формaттером по `out_of_range`, но это explicit
+ * Минимальная положительная конечная цена. Не-real prices (NaN/Infinity/≤0)
+ * исключаются. Если real-prices нет вовсе — fallback на первый bearer (он
+ * же потом будет отбракован формaттером по `out_of_range`, но это explicit
  * fallback вместо тихой потери товара).
  */
-function pickMinPriceRepresentative(group: Product[]): Product {
-  let best: Product | undefined;
-  for (const candidate of group) {
-    if (!isRealPrice(candidate.price)) continue;
-    if (best === undefined || candidate.price < best.price) {
+function pickMinPriceRepresentative(bearers: ParamBearer[]): ParamBearer {
+  let best: ParamBearer | undefined;
+  for (const candidate of bearers) {
+    if (!isRealPrice(candidate.product.price)) continue;
+    if (best === undefined || candidate.product.price < best.product.price) {
       best = candidate;
     }
   }
-  return best ?? group[0];
+  return best ?? bearers[0];
 }
 
 function isRealPrice(value: number): boolean {
@@ -246,9 +281,13 @@ function readParam(product: Product, key: string): string {
 }
 
 /**
- * Цена форматируется с разделителем тысяч ` ` (NBSP) — стандарт для
- * русской типографики, который Avito-CDATA принимает как обычный символ. Дробная
- * часть округляется до целого (Avito не разрешает дробные `<Price>`).
+ * Цена с разделителем тысяч (ASCII-пробел). Дробная часть округляется —
+ * Avito не разрешает дробные `<Price>`.
+ *
+ * `toLocaleString('ru-RU')` отдаёт NBSP (U+00A0) или narrow NBSP (U+202F) как
+ * разделитель тысяч — зависит от версии ICU. Нормализуем к ASCII-пробелу,
+ * чтобы output был детерминистичный и не ломал downstream-тесты / diff-
+ * инструменты. Avito CDATA принимает оба варианта одинаково.
  */
 function formatPrice(value: number): string {
   if (!Number.isFinite(value)) return String(value);
@@ -263,17 +302,17 @@ function renderVariantTable(
   pricePrefix: string,
   priceSuffix: string,
 ): string {
-  // HTML-entity-escape: paramKey/headerText/value/prefix/suffix приходят от
-  // пользователя (DTO) или из feed'а — могут содержать `<`/`>`/`&`. Внутри
-  // `<li>` это бы поломало парсер на стороне Avito (плюс sanitize-html сам
-  // эскейпит, но мы хотим, чтобы тут уже была валидная разметка).
+  // User-controlled values из DTO/feed'а — escape'им, чтобы не сломать
+  // парсинг Avito и не пропустить мусорные теги мимо sanitize-html.
   const escapedHeader = escapeHtml(headerText);
   const escapedKey = escapeHtml(paramKey);
+  const escapedPrefix = escapeHtml(pricePrefix);
+  const escapedSuffix = escapeHtml(priceSuffix);
   const items = rows
     .map(
       (row) =>
         `<li>${escapedKey} ${escapeHtml(row.value)} — ` +
-        `${escapeHtml(pricePrefix)}${formatPrice(row.price)}${escapeHtml(priceSuffix)}</li>`,
+        `${escapedPrefix}${formatPrice(row.price)}${escapedSuffix}</li>`,
     )
     .join("");
   return `<p><strong>${escapedHeader}</strong></p><ul>${items}</ul>`;

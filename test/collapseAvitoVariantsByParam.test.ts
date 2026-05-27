@@ -352,11 +352,114 @@ describe("collapseAvitoVariantsByParam: иммутабельность", () => {
       makeVariant(1, "v1", "Size", "42", 15000),
       makeVariant(1, "v2", "Size", "43", 12000),
     ];
-    const snapshot = JSON.parse(JSON.stringify(products));
+    const snapshot: Product[] = structuredClone(products);
 
     collapseAvitoVariantsByParam(products, { paramKey: "Size" });
 
     expect(products).toEqual(snapshot);
+  });
+});
+
+describe("collapseAvitoVariantsByParam: дополнительные edge-кейсы (post-review)", () => {
+  it("min-price выбирается ТОЛЬКО среди вариантов с paramKey (consistency с таблицей)", () => {
+    // Bug-guard: если cheapest вариант без paramKey, он бы стал
+    // представителем с low price'ом, но в таблице бы не появился —
+    // покупатель видел бы цену, которой нет ни в одной строке вариантов.
+    const products = [
+      makeVariant(1, "v1", "Size", "42", 700),
+      makeVariant(1, "v2", "Size", "", 500), // без Size, дешевле всех
+      makeVariant(1, "v3", "Size", "43", 800),
+    ];
+
+    const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].price).toBe(700); // НЕ 500 — игнорим вариант без Size
+    expect(result[0].variantId).toBe("v1");
+  });
+
+  it("при price-tie побеждает первый встретившийся (стабильность)", () => {
+    const products = [
+      makeVariant(1, "v1", "Size", "42", 12000),
+      makeVariant(1, "v2", "Size", "43", 12000), // одинаковая цена
+      makeVariant(1, "v3", "Size", "44", 15000),
+    ];
+
+    const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
+
+    expect(result[0].variantId).toBe("v1"); // первый из tied
+  });
+
+  it("sort='value-asc' — plain lexical, '10' < '2'", () => {
+    const products = [
+      makeVariant(1, "v1", "Size", "2", 1000),
+      makeVariant(1, "v2", "Size", "10", 1500),
+      makeVariant(1, "v3", "Size", "100", 2000),
+    ];
+
+    const result = collapseAvitoVariantsByParam(products, {
+      paramKey: "Size",
+      sort: "value-asc",
+    });
+    const description = result[0].description;
+    // Plain lexical: '10' < '100' < '2'
+    expect(description.indexOf("Size 10")).toBeLessThan(
+      description.indexOf("Size 100"),
+    );
+    expect(description.indexOf("Size 100")).toBeLessThan(
+      description.indexOf("Size 2"),
+    );
+  });
+
+  it("escape работает на pricePrefix и priceSuffix (не только на header/key)", () => {
+    const products = [
+      makeVariant(1, "v1", "Size", "42", 1000),
+      makeVariant(1, "v2", "Size", "43", 800),
+    ];
+
+    const result = collapseAvitoVariantsByParam(products, {
+      paramKey: "Size",
+      pricePrefix: "<b>от </b>",
+      priceSuffix: "<i> руб</i>",
+    });
+    const description = result[0].description;
+
+    expect(description).toContain("&lt;b&gt;от &lt;/b&gt;");
+    expect(description).toContain("&lt;i&gt; руб&lt;/i&gt;");
+    expect(description).not.toContain("<b>от </b>");
+    expect(description).not.toContain("<i> руб</i>");
+  });
+
+  it("parseLocaleNumber принимает точку как decimal sep ('36.5' → 36.5)", () => {
+    const products = [
+      makeVariant(1, "v1", "Size", "37", 12000),
+      makeVariant(1, "v2", "Size", "36.5", 12000),
+      makeVariant(1, "v3", "Size", "36", 12000),
+    ];
+
+    const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
+    const description = result[0].description;
+    expect(description.indexOf("36 —")).toBeLessThan(
+      description.indexOf("36.5 —"),
+    );
+    expect(description.indexOf("36.5 —")).toBeLessThan(
+      description.indexOf("37 —"),
+    );
+  });
+
+  it("parseLocaleNumber отвергает гибрид '36abc' → fallback на locale sort", () => {
+    const products = [
+      makeVariant(1, "v1", "Size", "36abc", 12000),
+      makeVariant(1, "v2", "Size", "37", 12000),
+    ];
+
+    const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
+    // Один из rows non-numeric → весь group идёт через locale-sort,
+    // лексикографически '36abc' < '37'.
+    const description = result[0].description;
+    expect(description.indexOf("36abc")).toBeLessThan(
+      description.indexOf("Size 37"),
+    );
   });
 });
 

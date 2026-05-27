@@ -1,38 +1,16 @@
 import { collapseAvitoVariantsByParam } from "src/formatter/avito/collapseVariantsByParam";
 import { sanitizeAvitoDescription } from "src/formatter/avito/sanitizeDescription";
-import { Currency, Vat, type Product } from "src/types";
+import { type Product } from "src/types";
 import { describe, expect, it } from "vitest";
 
-function makeVariant(
-  productId: number,
-  variantId: string,
-  paramKey: string,
-  paramValue: string,
-  price: number,
-  overrides: Partial<Product> = {},
-): Product {
-  return {
-    productId,
-    variantId,
-    title: `Product ${productId}`,
-    description: "Базовое описание товара.",
-    categoryId: 8713,
-    price,
-    currency: Currency.RUB,
-    vat: Vat.VAT_20,
-    images: ["https://cdn.example.com/img.jpg"],
-    vendor: "Nike",
-    params: [{ key: paramKey, value: paramValue }],
-    ...overrides,
-  };
-}
+import { makeAvitoVariant } from "./utils/makeAvitoVariant";
 
 describe("collapseAvitoVariantsByParam: базовое поведение", () => {
   it("свёртывает 3 варианта одного productId в 1 продукт с min ценой", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 15000),
-      makeVariant(1, "v2", "Size", "43", 12000),
-      makeVariant(1, "v3", "Size", "44", 13500),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 15000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "44", price: 13500 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
@@ -40,13 +18,13 @@ describe("collapseAvitoVariantsByParam: базовое поведение", () =
     expect(result).toHaveLength(1);
     expect(result[0].productId).toBe(1);
     expect(result[0].price).toBe(12000);
-    expect(result[0].variantId).toBe("v2"); // тот, у кого min price
+    expect(result[0].variantId).toBe("v2");
   });
 
   it("сохраняет исходное description и добавляет таблицу после separator", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 15000),
-      makeVariant(1, "v2", "Size", "43", 12000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 15000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 12000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
@@ -58,8 +36,8 @@ describe("collapseAvitoVariantsByParam: базовое поведение", () =
     expect(result[0].description).toContain("<li>Size 43 — 12 000 ₽</li>");
   });
 
-  it("одиночную группу не модифицирует (нет смысла в таблице)", () => {
-    const product = makeVariant(1, "v1", "Size", "42", 15000);
+  it("одиночную группу не модифицирует", () => {
+    const product = makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 15000 });
     const result = collapseAvitoVariantsByParam([product], { paramKey: "Size" });
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual(product);
@@ -68,10 +46,10 @@ describe("collapseAvitoVariantsByParam: базовое поведение", () =
 
   it("несколько productId группируются независимо", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 15000),
-      makeVariant(2, "v1", "Size", "S", 5000),
-      makeVariant(1, "v2", "Size", "43", 12000),
-      makeVariant(2, "v2", "Size", "M", 4500),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 15000 }),
+      makeAvitoVariant({ productId: 2, variantId: "v1", paramKey: "Size", paramValue: "S", price: 5000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 12000 }),
+      makeAvitoVariant({ productId: 2, variantId: "v2", paramKey: "Size", paramValue: "M", price: 4500 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
@@ -82,17 +60,15 @@ describe("collapseAvitoVariantsByParam: базовое поведение", () =
     expect(byId.get(2)?.price).toBe(4500);
   });
 
-  it("сохраняет порядок: представитель попадает в позицию первой встречи группы", () => {
+  it("представитель попадает в позицию первой встречи группы", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 15000),
-      makeVariant(2, "v1", "Size", "S", 5000),
-      makeVariant(1, "v2", "Size", "43", 12000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 15000 }),
+      makeAvitoVariant({ productId: 2, variantId: "v1", paramKey: "Size", paramValue: "S", price: 5000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 12000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
 
-    // productId=1 первый увиделся в input → представитель productId=1 первым
-    // в output, productId=2 — вторым.
     expect(result[0].productId).toBe(1);
     expect(result[1].productId).toBe(2);
   });
@@ -104,11 +80,11 @@ describe("collapseAvitoVariantsByParam: generic paramKey", () => {
     ["Объём", "100 мл", "200 мл"],
     ["Comfortability", "Hard", "Soft"],
   ])(
-    "работает с произвольным ключом %s (не привязан к Size)",
+    "работает с произвольным ключом %s",
     (paramKey, val1, val2) => {
       const products = [
-        makeVariant(1, "v1", paramKey, val1, 1000),
-        makeVariant(1, "v2", paramKey, val2, 800),
+        makeAvitoVariant({ productId: 1, variantId: "v1", paramKey, paramValue: val1, price: 1000 }),
+        makeAvitoVariant({ productId: 1, variantId: "v2", paramKey, paramValue: val2, price: 800 }),
       ];
 
       const result = collapseAvitoVariantsByParam(products, { paramKey });
@@ -124,43 +100,42 @@ describe("collapseAvitoVariantsByParam: generic paramKey", () => {
 describe("collapseAvitoVariantsByParam: edge cases", () => {
   it("не сворачивает группу, в которой ни у одного варианта нет paramKey", () => {
     const products = [
-      makeVariant(1, "v1", "Color", "Red", 1000),
-      makeVariant(1, "v2", "Color", "Blue", 800),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Color", paramValue: "Red", price: 1000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Color", paramValue: "Blue", price: 800 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
 
-    expect(result).toHaveLength(2); // вся группа осталась
+    expect(result).toHaveLength(2);
     expect(result.map((p) => p.variantId)).toEqual(["v1", "v2"]);
   });
 
   it("варианты без paramKey не попадают в таблицу, но группа всё равно сворачивается", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 15000),
-      makeVariant(1, "v2", "Size", "", 12000), // empty value → не попадёт в таблицу
-      makeVariant(1, "v3", "Size", "43", 10000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 15000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "43", price: 10000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
 
     expect(result).toHaveLength(1);
-    expect(result[0].price).toBe(10000); // min среди всех
+    expect(result[0].price).toBe(10000);
     const description = result[0].description;
     expect(description).toContain("<li>Size 42 — 15 000 ₽</li>");
     expect(description).toContain("<li>Size 43 — 10 000 ₽</li>");
-    // У v2 пустое value → строки про него быть не должно
     const liCount = (description.match(/<li>/g) ?? []).length;
     expect(liCount).toBe(2);
   });
 
   it("игнорирует невалидные цены при выборе min (0, negative, NaN, Infinity)", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 0),
-      makeVariant(1, "v2", "Size", "43", -100),
-      makeVariant(1, "v3", "Size", "44", NaN),
-      makeVariant(1, "v4", "Size", "45", Infinity),
-      makeVariant(1, "v5", "Size", "46", 15000),
-      makeVariant(1, "v6", "Size", "47", 12000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 0 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: -100 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "44", price: NaN }),
+      makeAvitoVariant({ productId: 1, variantId: "v4", paramKey: "Size", paramValue: "45", price: Infinity }),
+      makeAvitoVariant({ productId: 1, variantId: "v5", paramKey: "Size", paramValue: "46", price: 15000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v6", paramKey: "Size", paramValue: "47", price: 12000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
@@ -170,10 +145,10 @@ describe("collapseAvitoVariantsByParam: edge cases", () => {
     expect(result[0].variantId).toBe("v6");
   });
 
-  it("fallback на первый вариант если все цены невалидны (формattер потом отбракует)", () => {
+  it("fallback на первый вариант если все цены невалидны", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 0),
-      makeVariant(1, "v2", "Size", "43", -100),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 0 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: -100 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
@@ -184,13 +159,13 @@ describe("collapseAvitoVariantsByParam: edge cases", () => {
 
   it("читает paramKey из properties, если в params его нет", () => {
     const products = [
-      makeVariant(1, "v1", "OtherKey", "x", 15000, {
-        params: undefined,
-        properties: [{ key: "Size", value: "42" }],
+      makeAvitoVariant({
+        productId: 1, variantId: "v1", paramKey: "OtherKey", paramValue: "x", price: 15000,
+        overrides: { params: undefined, properties: [{ key: "Size", value: "42" }] },
       }),
-      makeVariant(1, "v2", "OtherKey", "y", 12000, {
-        params: undefined,
-        properties: [{ key: "Size", value: "43" }],
+      makeAvitoVariant({
+        productId: 1, variantId: "v2", paramKey: "OtherKey", paramValue: "y", price: 12000,
+        overrides: { params: undefined, properties: [{ key: "Size", value: "43" }] },
       }),
     ];
 
@@ -201,12 +176,13 @@ describe("collapseAvitoVariantsByParam: edge cases", () => {
     expect(result[0].description).toContain("Size 43");
   });
 
-  it("params имеет приоритет над properties (повтор семантики formatter.buildParamIndex)", () => {
+  it("params имеет приоритет над properties", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42-from-params", 15000, {
-        properties: [{ key: "Size", value: "42-from-properties" }],
+      makeAvitoVariant({
+        productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42-from-params", price: 15000,
+        overrides: { properties: [{ key: "Size", value: "42-from-properties" }] },
       }),
-      makeVariant(1, "v2", "Size", "43-from-params", 12000),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43-from-params", price: 12000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
@@ -217,8 +193,8 @@ describe("collapseAvitoVariantsByParam: edge cases", () => {
 
   it("empty description: таблица идёт без separator", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 15000, { description: "" }),
-      makeVariant(1, "v2", "Size", "43", 12000, { description: "" }),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 15000, overrides: { description: "" } }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 12000, overrides: { description: "" } }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
@@ -231,9 +207,9 @@ describe("collapseAvitoVariantsByParam: edge cases", () => {
 describe("collapseAvitoVariantsByParam: сортировка", () => {
   it("default 'value-numeric-asc' сортирует числовые значения по возрастанию", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "44", 12000),
-      makeVariant(1, "v2", "Size", "42", 14000),
-      makeVariant(1, "v3", "Size", "43", 13000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "44", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "42", price: 14000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "43", price: 13000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
@@ -247,9 +223,9 @@ describe("collapseAvitoVariantsByParam: сортировка", () => {
 
   it("обрабатывает значения с запятой как десятичные ('36,5' < '37')", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "37", 12000),
-      makeVariant(1, "v2", "Size", "36,5", 12000),
-      makeVariant(1, "v3", "Size", "36", 12000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "37", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "36,5", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "36", price: 12000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
@@ -264,14 +240,13 @@ describe("collapseAvitoVariantsByParam: сортировка", () => {
 
   it("fallback на locale-aware ASC если хоть одно значение не число", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "M", 12000),
-      makeVariant(1, "v2", "Size", "L", 12500),
-      makeVariant(1, "v3", "Size", "S", 11500),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "M", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "L", price: 12500 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "S", price: 11500 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
     const description = result[0].description;
-    // ASC по строке: L < M < S (latin uppercase)
     expect(description.indexOf("Size L")).toBeLessThan(
       description.indexOf("Size M"),
     );
@@ -282,9 +257,9 @@ describe("collapseAvitoVariantsByParam: сортировка", () => {
 
   it("'price-asc' сортирует по цене", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "44", 18000),
-      makeVariant(1, "v2", "Size", "42", 12000),
-      makeVariant(1, "v3", "Size", "43", 15000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "44", price: 18000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "42", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "43", price: 15000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, {
@@ -299,13 +274,33 @@ describe("collapseAvitoVariantsByParam: сортировка", () => {
       description.indexOf("18 000"),
     );
   });
+
+  it("'value-asc' — plain lexical: '10' < '100' < '2'", () => {
+    const products = [
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "2", price: 1000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "10", price: 1500 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "100", price: 2000 }),
+    ];
+
+    const result = collapseAvitoVariantsByParam(products, {
+      paramKey: "Size",
+      sort: "value-asc",
+    });
+    const description = result[0].description;
+    expect(description.indexOf("Size 10")).toBeLessThan(
+      description.indexOf("Size 100"),
+    );
+    expect(description.indexOf("Size 100")).toBeLessThan(
+      description.indexOf("Size 2"),
+    );
+  });
 });
 
 describe("collapseAvitoVariantsByParam: HTML safety", () => {
-  it("HTML-escape'ит специальные символы в value, header, paramKey", () => {
+  it("escape'ит специальные символы в value, header, paramKey", () => {
     const products = [
-      makeVariant(1, "v1", "<bad>", "a<b>c&d", 12000),
-      makeVariant(1, "v2", "<bad>", "x>y", 13000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "<bad>", paramValue: "a<b>c&d", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "<bad>", paramValue: "x>y", price: 13000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, {
@@ -314,107 +309,18 @@ describe("collapseAvitoVariantsByParam: HTML safety", () => {
     });
     const description = result[0].description;
 
-    // Тело хедера эскейпится:
     expect(description).toContain("&lt;script&gt;");
-    expect(description).toContain("&amp;amp"); // & → &amp;
-    // paramKey в строке тоже эскейпится:
+    expect(description).toContain("&amp;amp");
     expect(description).toContain("&lt;bad&gt;");
-    // value:
     expect(description).toContain("a&lt;b&gt;c&amp;d");
-    // Не должно быть literal `<bad>` или `<script>` в выходе (вне tag-разметки)
     expect(description).not.toMatch(/<bad>/);
     expect(description).not.toContain("<script>");
   });
 
-  it("производит HTML, который проходит sanitizeAvitoDescription без потерь tag'ов", () => {
+  it("escape работает на pricePrefix и priceSuffix", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 12000),
-      makeVariant(1, "v2", "Size", "43", 13000),
-    ];
-
-    const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
-    const description = result[0].description;
-
-    const sanitized = sanitizeAvitoDescription(description);
-
-    // sanitize не должен схлопнуть нашу таблицу — все наши теги в allowlist'е.
-    // (<br> в sanitize становится <br /> — это нормально, но всё ещё там)
-    expect(sanitized).toContain("<p><strong>Варианты и цены:</strong></p>");
-    expect(sanitized).toContain("<ul>");
-    expect(sanitized).toContain("<li>Size 42");
-    expect(sanitized).toContain("<li>Size 43");
-  });
-});
-
-describe("collapseAvitoVariantsByParam: иммутабельность", () => {
-  it("не мутирует input products", () => {
-    const products = [
-      makeVariant(1, "v1", "Size", "42", 15000),
-      makeVariant(1, "v2", "Size", "43", 12000),
-    ];
-    const snapshot: Product[] = structuredClone(products);
-
-    collapseAvitoVariantsByParam(products, { paramKey: "Size" });
-
-    expect(products).toEqual(snapshot);
-  });
-});
-
-describe("collapseAvitoVariantsByParam: дополнительные edge-кейсы (post-review)", () => {
-  it("min-price выбирается ТОЛЬКО среди вариантов с paramKey (consistency с таблицей)", () => {
-    // Bug-guard: если cheapest вариант без paramKey, он бы стал
-    // представителем с low price'ом, но в таблице бы не появился —
-    // покупатель видел бы цену, которой нет ни в одной строке вариантов.
-    const products = [
-      makeVariant(1, "v1", "Size", "42", 700),
-      makeVariant(1, "v2", "Size", "", 500), // без Size, дешевле всех
-      makeVariant(1, "v3", "Size", "43", 800),
-    ];
-
-    const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
-
-    expect(result).toHaveLength(1);
-    expect(result[0].price).toBe(700); // НЕ 500 — игнорим вариант без Size
-    expect(result[0].variantId).toBe("v1");
-  });
-
-  it("при price-tie побеждает первый встретившийся (стабильность)", () => {
-    const products = [
-      makeVariant(1, "v1", "Size", "42", 12000),
-      makeVariant(1, "v2", "Size", "43", 12000), // одинаковая цена
-      makeVariant(1, "v3", "Size", "44", 15000),
-    ];
-
-    const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
-
-    expect(result[0].variantId).toBe("v1"); // первый из tied
-  });
-
-  it("sort='value-asc' — plain lexical, '10' < '2'", () => {
-    const products = [
-      makeVariant(1, "v1", "Size", "2", 1000),
-      makeVariant(1, "v2", "Size", "10", 1500),
-      makeVariant(1, "v3", "Size", "100", 2000),
-    ];
-
-    const result = collapseAvitoVariantsByParam(products, {
-      paramKey: "Size",
-      sort: "value-asc",
-    });
-    const description = result[0].description;
-    // Plain lexical: '10' < '100' < '2'
-    expect(description.indexOf("Size 10")).toBeLessThan(
-      description.indexOf("Size 100"),
-    );
-    expect(description.indexOf("Size 100")).toBeLessThan(
-      description.indexOf("Size 2"),
-    );
-  });
-
-  it("escape работает на pricePrefix и priceSuffix (не только на header/key)", () => {
-    const products = [
-      makeVariant(1, "v1", "Size", "42", 1000),
-      makeVariant(1, "v2", "Size", "43", 800),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 1000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 800 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, {
@@ -430,11 +336,56 @@ describe("collapseAvitoVariantsByParam: дополнительные edge-кей
     expect(description).not.toContain("<i> руб</i>");
   });
 
-  it("parseLocaleNumber принимает точку как decimal sep ('36.5' → 36.5)", () => {
+  it("output проходит sanitizeAvitoDescription без потерь tag'ов", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "37", 12000),
-      makeVariant(1, "v2", "Size", "36.5", 12000),
-      makeVariant(1, "v3", "Size", "36", 12000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 13000 }),
+    ];
+
+    const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
+    const sanitized = sanitizeAvitoDescription(result[0].description);
+
+    expect(sanitized).toContain("<p><strong>Варианты и цены:</strong></p>");
+    expect(sanitized).toContain("<ul>");
+    expect(sanitized).toContain("<li>Size 42");
+    expect(sanitized).toContain("<li>Size 43");
+  });
+});
+
+describe("collapseAvitoVariantsByParam: семантика min-price", () => {
+  it("min-price выбирается ТОЛЬКО среди вариантов с paramKey", () => {
+    const products = [
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 700 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "", price: 500 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "43", price: 800 }),
+    ];
+
+    const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].price).toBe(700);
+    expect(result[0].variantId).toBe("v1");
+  });
+
+  it("при price-tie побеждает первый встретившийся", () => {
+    const products = [
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "44", price: 15000 }),
+    ];
+
+    const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
+
+    expect(result[0].variantId).toBe("v1");
+  });
+});
+
+describe("collapseAvitoVariantsByParam: парсинг числовых значений", () => {
+  it("принимает точку как decimal separator ('36.5' → 36.5)", () => {
+    const products = [
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "37", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "36.5", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v3", paramKey: "Size", paramValue: "36", price: 12000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
@@ -447,15 +398,13 @@ describe("collapseAvitoVariantsByParam: дополнительные edge-кей
     );
   });
 
-  it("parseLocaleNumber отвергает гибрид '36abc' → fallback на locale sort", () => {
+  it("отвергает гибрид '36abc' → fallback на locale sort", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "36abc", 12000),
-      makeVariant(1, "v2", "Size", "37", 12000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "36abc", price: 12000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "37", price: 12000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, { paramKey: "Size" });
-    // Один из rows non-numeric → весь group идёт через locale-sort,
-    // лексикографически '36abc' < '37'.
     const description = result[0].description;
     expect(description.indexOf("36abc")).toBeLessThan(
       description.indexOf("Size 37"),
@@ -463,11 +412,25 @@ describe("collapseAvitoVariantsByParam: дополнительные edge-кей
   });
 });
 
+describe("collapseAvitoVariantsByParam: иммутабельность", () => {
+  it("не мутирует input products", () => {
+    const products = [
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 15000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 12000 }),
+    ];
+    const snapshot: Product[] = structuredClone(products);
+
+    collapseAvitoVariantsByParam(products, { paramKey: "Size" });
+
+    expect(products).toEqual(snapshot);
+  });
+});
+
 describe("collapseAvitoVariantsByParam: custom форматирование", () => {
   it("headerText/pricePrefix/priceSuffix влияют на output", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 15000),
-      makeVariant(1, "v2", "Size", "43", 12000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 15000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 12000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, {
@@ -486,8 +449,8 @@ describe("collapseAvitoVariantsByParam: custom форматирование", ()
 
   it("custom separator используется вместо default <br><br>", () => {
     const products = [
-      makeVariant(1, "v1", "Size", "42", 15000),
-      makeVariant(1, "v2", "Size", "43", 12000),
+      makeAvitoVariant({ productId: 1, variantId: "v1", paramKey: "Size", paramValue: "42", price: 15000 }),
+      makeAvitoVariant({ productId: 1, variantId: "v2", paramKey: "Size", paramValue: "43", price: 12000 }),
     ];
 
     const result = collapseAvitoVariantsByParam(products, {

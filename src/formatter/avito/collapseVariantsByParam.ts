@@ -1,14 +1,10 @@
 import { type Product } from "../../types";
 
 /**
- * Сортировка вариантов в описании.
- *   - `"value-numeric-asc"` (default) — пытается распарсить значения как числа
- *     (`"36"` → 36, `"36,5"` → 36.5) и сортировать по возрастанию. Если хоть
- *     одно значение группы не числовое — fallback на locale-aware ASC.
- *   - `"value-asc"` — всегда locale-aware ASC по строке.
- *   - `"price-asc"` — по цене вариант ASC (на случай если param — это, к
- *     примеру, не размер, а условный «комплектация», для которого порядок
- *     по цене информативнее).
+ * `value-numeric-asc` (default): numeric ASC, fallback на locale-aware при
+ * любом non-numeric значении в группе.
+ * `value-asc`: plain locale ASC, без numeric-coercion.
+ * `price-asc`: ASC по цене.
  */
 export type CollapseVariantsSort =
   | "value-numeric-asc"
@@ -16,69 +12,28 @@ export type CollapseVariantsSort =
   | "price-asc";
 
 export interface CollapseAvitoVariantsOptions {
-  /**
-   * Имя ключа в `product.params` (а если там нет — в `product.properties`), по
-   * которому строится таблица вариантов. **Generic**: это может быть `"Size"`,
-   * `"Color"`, `"Объём"`, или любой другой param. Совпадение case-sensitive,
-   * как и в `AvitoFormatter.buildParamIndex`.
-   */
+  /** Case-sensitive, как `AvitoFormatter.buildParamIndex`. */
   paramKey: string;
-  /**
-   * Заголовок таблицы. Default: `"Варианты и цены:"`.
-   */
   headerText?: string;
-  /**
-   * Префикс к цене в строке (например, `"от "`). Default: пусто.
-   */
   pricePrefix?: string;
-  /**
-   * Суффикс к цене. Default: `" ₽"`.
-   */
   priceSuffix?: string;
-  /**
-   * Разделитель между исходным description и таблицей. Default: `"<br><br>"`.
-   * sanitize-html (см. `sanitizeAvitoDescription`) пропускает `<br>`.
-   */
+  /** Между исходным description и таблицей. `<br>` проходит sanitizeAvitoDescription. */
   separator?: string;
-  /** Default: `"value-numeric-asc"`. См. `CollapseVariantsSort`. */
   sort?: CollapseVariantsSort;
 }
 
 /**
- * Сворачивает варианты одного товара (`Product[]` с общим `productId`) в одно
- * объявление с минимальной положительной ценой и таблицей вариантов в
- * описании. Используется когда Avito-фид должен показывать один `<Ad>` на
- * товар (а не на каждую SKU), а размер/цвет/объём — в описании.
+ * Сворачивает варианты одного товара (общий `productId`) в одно объявление
+ * с минимальной положительной ценой; описание дополняется HTML-таблицей
+ * `<paramKey value → price>`.
  *
- * **Что делается на группу** (= товары с одним `productId`):
- *   1. Выбирается представитель с минимальной положительной ценой (нулевые/
- *      отрицательные/NaN не участвуют — повторяем семантику
- *      `dedupeGoatSkusByMinPrice`).
- *   2. Собирается список `{value: params[paramKey], price}` для каждого
- *      варианта группы; варианты без `paramKey` пропускаются.
- *   3. Список сортируется по `options.sort`.
- *   4. К `description` представителя дописывается HTML-таблица:
- *      `<p><strong>Header</strong></p><ul><li>paramKey value — price ₽</li>…</ul>`.
- *      Только теги из Avito-allowlist (`p`/`strong`/`ul`/`li`/`br`); описание
- *      потом ещё пройдёт через `sanitizeAvitoDescription` в `AvitoFormatter`.
- *   5. В результат идёт только представитель.
+ * Чистая функция: input не мутируется. Порядок групп в output совпадает с
+ * порядком первого появления `productId` в input — фиду нужен стабильный
+ * порядок для diff-able re-uploads.
  *
- * **Edge-cases**:
- *   - Группа из 1 элемента → представитель возвращается как есть, без HTML-
- *     аппенда (одиночному товару таблица не нужна).
- *   - Ни у одного варианта группы нет `paramKey` → группа НЕ сворачивается:
- *     все элементы возвращаются как есть. Это safety: без значения param'а
- *     таблица бессмысленна, плюс сохраняем старое поведение (N ad'ов) если
- *     юзер ошибся именем ключа.
- *   - Все цены в группе невалидны (≤0 / NaN / Infinity) → возвращается
- *     первый встретившийся элемент (нет «лучшего») с таблицей. Формaттер
- *     потом отбракует его по `out_of_range` — но это лучше, чем тихо
- *     выбросить весь товар.
- *   - Внутри группы порядок `productId` сохраняется (стабильный): представитель
- *     возвращается в той позиции, где он впервые встретился в input'е.
- *
- * Чистая функция: input не мутируется, на каждого представителя клонируется
- * новый объект.
+ * Если ни у одного варианта группы нет `paramKey` (опечатка в имени? нет
+ * данных?) — группа возвращается as-is, без свёртки. Это safer fallback,
+ * чем схлопнуть всё в один ad без списка вариантов.
  */
 export function collapseAvitoVariantsByParam(
   products: Product[],
@@ -93,10 +48,8 @@ export function collapseAvitoVariantsByParam(
     sort = "value-numeric-asc",
   } = options;
 
-  // Группировка с сохранением порядка первого появления group-key — Map в JS
-  // гарантирует insertion-order при iter(). Это важно: представитель должен
-  // попасть в output на ту же логическую позицию, где был любой из вариантов
-  // его группы (consumer'ы зависят от стабильности порядка фида).
+  // Map гарантирует insertion-order при iter() — представитель попадает в
+  // позицию первой встречи группы. Замена на Record/Object порядок ломает.
   const groups = new Map<number, Product[]>();
   for (const product of products) {
     const existing = groups.get(product.productId);
@@ -110,26 +63,17 @@ export function collapseAvitoVariantsByParam(
       result.push(group[0]);
       continue;
     }
-    // Строим список «вариант-носитель paramKey + его цена» одним проходом
-    // (readParam — самая горячая операция файла, повторять её отдельным
-    // group.some() ради pre-check'а — лишний O(N) на группу).
     const paramBearers = collectParamBearers(group, paramKey);
     if (paramBearers.length === 0) {
-      // Без значения paramKey свёртка дала бы пустую таблицу — safer
-      // оставить N ad-ов (= поведение без флага), а не схлопнуть в один
-      // ad без перечня вариантов.
       result.push(...group);
       continue;
     }
 
-    // Min-price выбираем ТОЛЬКО среди param-bearers: иначе variant без
-    // paramKey мог бы стать представителем с low price'ом, но в таблице
-    // его не было бы — покупатель видел бы цену, не отражённую ни в одной
-    // строке варианта.
+    // Min-price только среди bearers: цена представителя обязана совпадать
+    // с одной из строк таблицы, иначе покупатель увидит цену, не отражённую
+    // ни в одном варианте.
     const representative = pickMinPriceRepresentative(paramBearers);
-
     const rows = buildVariantRows(paramBearers, sort);
-
     const appendix = renderVariantTable(
       rows,
       paramKey,
@@ -150,12 +94,6 @@ export function collapseAvitoVariantsByParam(
   return result;
 }
 
-/**
- * Пара «вариант + его значение paramKey'а» — носитель, переживший фильтр
- * `readParam`. Используется и для min-price selection, и для построения
- * rows таблицы (общий источник истины, чтобы цена представителя совпадала
- * с одной из строк описания).
- */
 interface ParamBearer {
   product: Product;
   value: string;
@@ -177,7 +115,7 @@ function collectParamBearers(
 interface VariantRow {
   value: string;
   price: number;
-  /** Pre-parsed numeric, NaN если value не парсится — для numeric-сортировки. */
+  /** NaN sentinel = value не парсится; выключает numeric-sort. */
   numeric: number;
 }
 
@@ -196,23 +134,13 @@ function buildVariantRows(
 
 function sortVariantRows(rows: VariantRow[], sort: CollapseVariantsSort): void {
   if (sort === "price-asc") {
-    // NaN/Infinity всплывают в конец стабильно: при `a.price - b.price` NaN
-    // делает любую пару incomparable, но V8 sort стабилен, поэтому реальные
-    // позиции NaN-ов = их позиции в исходном массиве. Цены проходят
-    // valid'ацию в формaттере (out_of_range), так что в фид невалидная
-    // цена всё равно не уедет — паника тут излишняя.
     rows.sort((a, b) => a.price - b.price);
     return;
   }
   if (sort === "value-asc") {
-    // Plain lexical: '10' < '2' < '100' — без numeric-coercion. Отдельный
-    // mode для случаев, когда значение param — кодовое имя ('M', 'L', 'XL')
-    // и numeric-сравнение даст seemingly-random порядок.
     rows.sort((a, b) => a.value.localeCompare(b.value, "ru"));
     return;
   }
-  // sort === "value-numeric-asc" (default): numeric, если все значения
-  // парсятся; иначе locale-aware с numeric option (умеет '36' < '36,5').
   const allNumeric = rows.every((r) => Number.isFinite(r.numeric));
   if (allNumeric) {
     rows.sort((a, b) => a.numeric - b.numeric);
@@ -223,12 +151,6 @@ function sortVariantRows(rows: VariantRow[], sort: CollapseVariantsSort): void {
   );
 }
 
-/**
- * Минимальная положительная конечная цена. Не-real prices (NaN/Infinity/≤0)
- * исключаются. Если real-prices нет вовсе — fallback на первый bearer (он
- * же потом будет отбракован формaттером по `out_of_range`, но это explicit
- * fallback вместо тихой потери товара).
- */
 function pickMinPriceRepresentative(bearers: ParamBearer[]): ParamBearer {
   let best: ParamBearer | undefined;
   for (const candidate of bearers) {
@@ -237,6 +159,8 @@ function pickMinPriceRepresentative(bearers: ParamBearer[]): ParamBearer {
       best = candidate;
     }
   }
+  // Все цены невалидны → отдаём первый bearer; формaттер отбракует его по
+  // out_of_range. Лучше явный fallback, чем тихая потеря товара.
   return best ?? bearers[0];
 }
 
@@ -244,27 +168,16 @@ function isRealPrice(value: number): boolean {
   return Number.isFinite(value) && value > 0;
 }
 
-/**
- * Парсит число с десятичной запятой/точкой (Avito хранит размеры как `"36,5"`).
- * Для всего, что не число (`"42 EU"`, `"M"`, …) → NaN, что выключает numeric-
- * sort и заставляет fallback на locale-aware string sort.
- */
 function parseLocaleNumber(value: string): number {
   const normalized = value.replace(",", ".").trim();
   if (normalized.length === 0) return NaN;
-  // parseFloat распарсит "36abc" → 36, что для нас false-positive (numeric-
-  // sort включится, а значения будут смешанные). Поэтому проверяем что
-  // строка целиком — число.
+  // parseFloat распарсил бы "36abc" → 36 — false-positive: numeric-sort
+  // включился бы на смешанной группе. Требуем строку целиком как число.
   if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) return NaN;
   return Number(normalized);
 }
 
-/**
- * Зеркалит `AvitoFormatter.buildParamIndex` semantics: ищет ключ сначала в
- * `params`, при отсутствии (или пустом значении) — в `properties`. Empty/
- * whitespace трактуется как «не задано». Важно: ключ — exact-match case-
- * sensitive, как делает индекс в формaттере.
- */
+/** Зеркало `AvitoFormatter.buildParamIndex`: params → properties, exact-match. */
 function readParam(product: Product, key: string): string {
   const lists = [product.params, product.properties];
   for (const list of lists) {
@@ -280,18 +193,11 @@ function readParam(product: Product, key: string): string {
   return "";
 }
 
-/**
- * Цена с разделителем тысяч (ASCII-пробел). Дробная часть округляется —
- * Avito не разрешает дробные `<Price>`.
- *
- * `toLocaleString('ru-RU')` отдаёт NBSP (U+00A0) или narrow NBSP (U+202F) как
- * разделитель тысяч — зависит от версии ICU. Нормализуем к ASCII-пробелу,
- * чтобы output был детерминистичный и не ломал downstream-тесты / diff-
- * инструменты. Avito CDATA принимает оба варианта одинаково.
- */
 function formatPrice(value: number): string {
   if (!Number.isFinite(value)) return String(value);
   const integer = Math.round(value);
+  // toLocaleString отдаёт NBSP/narrow-NBSP (зависит от версии ICU); ASCII-
+  // пробел для детерминизма в diff-able output'е.
   return integer.toLocaleString("ru-RU").replace(/\s/g, " ");
 }
 
@@ -302,8 +208,8 @@ function renderVariantTable(
   pricePrefix: string,
   priceSuffix: string,
 ): string {
-  // User-controlled values из DTO/feed'а — escape'им, чтобы не сломать
-  // парсинг Avito и не пропустить мусорные теги мимо sanitize-html.
+  // User-controlled values из DTO/feed'а — escape'им, чтобы не пропустить
+  // мусорные теги мимо sanitize-html в формaттере.
   const escapedHeader = escapeHtml(headerText);
   const escapedKey = escapeHtml(paramKey);
   const escapedPrefix = escapeHtml(pricePrefix);

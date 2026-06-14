@@ -1,6 +1,6 @@
 import { CSVStream } from "../streams/CSVStream";
 import { type IParam, type Brand, type Category, type Product } from "../types";
-import { buildCategoryPaths, urlQueryEncode } from "../utils";
+import { buildCategoryPaths, escapeUrlForList } from "../utils";
 import {
   Extension,
   type FormatterAbstract,
@@ -249,7 +249,9 @@ export class WooCommerceFormatter implements FormatterAbstract {
         ?.map((category) => category.name);
 
       const price = product.price ? product.price : "";
-      const images = product.images?.map(urlQueryEncode).join(",");
+      const images = product.images
+        ?.map((url) => escapeUrlForList(url, ","))
+        .join(",");
 
       let row = {
         ID: product.variantId,

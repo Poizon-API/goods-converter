@@ -29,18 +29,36 @@ export class CSVStream {
   setColumns(columns: Set<string>) {
     this.columns = columns;
     this.stream.write(
-      Array.from(this.columns).join(this.delimiter) + this.lineSeparator,
+      Array.from(this.columns)
+        .map((column) => this.escapeField(column))
+        .join(this.delimiter) + this.lineSeparator,
     );
   }
 
   async addRow(items: Record<string, any>) {
     const data =
       Array.from(this.columns)
-        .map((key) =>
-          items[key] === undefined ? this.emptyFieldValue : items[key] + "",
-        )
+        .map((key) => {
+          const value =
+            items[key] === undefined ? this.emptyFieldValue : items[key] + "";
+          return this.escapeField(value);
+        })
         .join(this.delimiter) + this.lineSeparator;
 
     await this.writer(data);
+  }
+
+  /**
+   * RFC 4180 quoting. Без него свободный текст (description/title) с сырым `\n`
+   * или разделителем разрывал запись на две физические строки.
+   */
+  private escapeField(value: string): string {
+    const needsQuoting =
+      value.includes(this.delimiter) ||
+      value.includes('"') ||
+      value.includes("\n") ||
+      value.includes("\r");
+    if (!needsQuoting) return value;
+    return `"${value.replace(/"/g, '""')}"`;
   }
 }

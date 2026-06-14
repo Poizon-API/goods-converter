@@ -1,10 +1,17 @@
+/**
+ * Делает URL картинки безопасным для списка, который склеивается через
+ * `join(",")`: запятая — единственный символ, ломающий такой список, поэтому
+ * кодируем её в `%2C` во всём URL (и в path, и в query). Валидный URL заодно
+ * нормализуется через `URL`; невалидный/относительный не теряем — экранируем
+ * запятые в нём как есть.
+ */
 export const urlQueryEncode = (inputUrl: string): string => {
+  let normalized = inputUrl;
   try {
-    const url = new URL(inputUrl);
-    url.search = url.search.replace(/^\?/, "").replace(/,/g, "%2C");
-    return url.toString();
-  } catch (error) {
-    console.error("Invalid URL:", error);
-    return "";
+    normalized = new URL(inputUrl).toString();
+  } catch {
+    // Сюда попадает лишь невалидный/относительный URL — нормализовать нечем,
+    // экранируем запятые во входе как есть.
   }
+  return normalized.replace(/,/g, "%2C");
 };

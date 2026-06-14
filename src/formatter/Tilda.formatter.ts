@@ -1,6 +1,6 @@
 import { CSVStream } from "../streams/CSVStream";
 import { type Brand, type Category, type Product } from "../types";
-import { urlQueryEncode } from "../utils";
+import { escapeUrlForList } from "../utils";
 import {
   Extension,
   type FormatterAbstract,
@@ -64,7 +64,9 @@ export class TildaFormatter implements FormatterAbstract {
         Category: mappedCategories[product.categoryId],
         Title: product.title,
         Text: product.description,
-        Photo: product.images?.map(urlQueryEncode).join(","),
+        Photo: product.images
+          ?.map((url) => escapeUrlForList(url, ","))
+          .join(","),
         Price: product.price,
         "Price Old": product.oldPrice,
         Quantity: product.count,

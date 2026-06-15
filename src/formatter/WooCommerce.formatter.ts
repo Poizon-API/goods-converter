@@ -1,6 +1,10 @@
 import { CSVStream } from "../streams/CSVStream";
 import { type IParam, type Brand, type Category, type Product } from "../types";
-import { buildCategoryPaths, escapeUrlForList } from "../utils";
+import {
+  buildCategoryPaths,
+  escapeCategoryName,
+  escapeUrlForList,
+} from "../utils";
 import {
   Extension,
   type FormatterAbstract,
@@ -264,7 +268,7 @@ export class WooCommerceFormatter implements FormatterAbstract {
         Stock: product.count ?? 0,
         "Regular price": price,
         Position: index + 1,
-        Categories: pathsArray?.join(" > "),
+        Categories: pathsArray?.map(escapeCategoryName).join(" > "),
         Tags: product.keywords?.join(","),
         Images: images,
         SizeGrid: "",

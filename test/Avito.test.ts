@@ -2,9 +2,12 @@ import {
   Currency,
   Formatters,
   Vat,
+  type AvitoProductClassification,
   type AvitoProductError,
+  type AvitoSingleTemplateOptions,
   type AvitoSneakersFormatterOptions,
   type Product,
+  type SupportedTemplateId,
 } from "src";
 import { SCHEMA as SCHEMA_100368 } from "src/formatter/avito/templates/100368";
 import { SCHEMA as SCHEMA_100388 } from "src/formatter/avito/templates/100388";
@@ -14,7 +17,7 @@ import { streamToBuffer } from "./utils/streamToBuffer";
 
 import { PassThrough } from "stream";
 
-const baseOptions: AvitoSneakersFormatterOptions = {
+const baseOptions: AvitoSingleTemplateOptions = {
   templateId: 100368,
   category: "Одежда, обувь, аксессуары",
   goodsType: "Мужская обувь",
@@ -55,14 +58,17 @@ const collectErrors = (): {
   };
 };
 
-// Test-only: build options object с заведомо некорректным templateId, обходя
-// TS-проверку union'а SupportedTemplateId — нужно для теста runtime guard'а в
-// AvitoFormatter. Один `as` здесь сознательный, isolated в test-helper.
+// Test-only: out-of-union templateId для проверки runtime-guard'ов
+// (AvitoFormatter валидирует templateId на рантайме, хотя тип это запрещает).
+// Касты изолированы в этих двух хелперах — больше нигде в тестах их нет.
 function unsafeOptions(
-  o: Omit<AvitoSneakersFormatterOptions, "templateId"> & { templateId: number },
+  o: Omit<AvitoSingleTemplateOptions, "templateId"> & { templateId: number },
 ): AvitoSneakersFormatterOptions {
   return o as AvitoSneakersFormatterOptions;
 }
+
+const unsafeTemplateId = (n: number): SupportedTemplateId =>
+  n as unknown as SupportedTemplateId;
 
 const renderAvito = async (
   products: Product[],
@@ -998,3 +1004,200 @@ describe.each([
     });
   },
 );
+
+describe("AvitoFormatter multi-template (resolveProduct)", () => {
+  // Per-product часть от резолвера: только templateId + condition.
+  // condition берём из baseOptions (валидное значение словаря).
+  const menPick: AvitoProductClassification = {
+    templateId: 100368,
+    condition: baseOptions.condition,
+  };
+  const womenPick: AvitoProductClassification = {
+    templateId: 100388,
+    condition: baseOptions.condition,
+  };
+
+  // Общие для фида теги. adType берём из baseOptions — там NBSP-корректное
+  // значение (обычный пробел Avito отвергает, см. тест single-режима).
+  const FEED = { category: baseOptions.category, adType: baseOptions.adType };
+
+  // Размер, заведомо валидный для конкретного шаблона (первый из его словаря).
+  const sizeFor = (schema: { sizeValues?: readonly string[] }): string =>
+    schema.sizeValues?.[0] ?? "42";
+
+  const productFor = (
+    schema: { sizeValues?: readonly string[] },
+    overrides?: Partial<Product>,
+  ): Product =>
+    validProduct({
+      params: [
+        { key: "Size", value: sizeFor(schema) },
+        { key: "Color", value: "Белый" },
+        { key: "ColorName", value: "Молочный" },
+      ],
+      ...overrides,
+    });
+
+  it("mixes men's and women's templates in one <Ads>, deriving GoodsType/ApparelType from templateId", async () => {
+    const men = productFor(SCHEMA_100368, { productId: 1, variantId: "1" });
+    const women = productFor(SCHEMA_100388, { productId: 2, variantId: "2" });
+
+    const result = await renderAvito([men, women], {
+      resolveProduct: (p) => (p.productId === 1 ? menPick : womenPick),
+      ...FEED,
+    });
+
+    // Один контейнер <Ads>, два <Ad> — не два файла.
+    expect(result.match(/<Ads /g)?.length).toBe(1);
+    expect(result.match(/<Ad>/g)?.length).toBe(2);
+    // goodsType/apparelType НЕ передаются — форматтер выводит их из templateId:
+    expect(result).toContain("<GoodsType>Мужская обувь</GoodsType>");
+    expect(result).toContain("<GoodsType>Женская обувь</GoodsType>");
+    expect(result).toContain("<ApparelType>Кроссовки</ApparelType>");
+    expect(result).toContain("<ApparelType>Кроссовки и кеды</ApparelType>");
+    expect(result).toContain("<Id>1-1</Id>");
+    expect(result).toContain("<Id>2-2</Id>");
+  });
+
+  it("emits per-product condition (varies item to item)", async () => {
+    const a = productFor(SCHEMA_100368, { productId: 1, variantId: "1" });
+    const b = productFor(SCHEMA_100368, { productId: 2, variantId: "2" });
+    const result = await renderAvito([a, b], {
+      resolveProduct: (p) =>
+        p.productId === 1
+          ? { templateId: 100368, condition: "Новое с биркой" }
+          : { templateId: 100368, condition: "Хорошее" },
+      ...FEED,
+    });
+    expect(result).toContain("<Condition>Новое с биркой</Condition>");
+    expect(result).toContain("<Condition>Хорошее</Condition>");
+  });
+
+  it("emits shared TargetAudience/Address on every <Ad>, omits them when not set", async () => {
+    const products = [
+      productFor(SCHEMA_100368, { productId: 1, variantId: "1" }),
+      productFor(SCHEMA_100388, { productId: 2, variantId: "2" }),
+    ];
+    const withExtras = await renderAvito(products, {
+      resolveProduct: (p) => (p.productId === 1 ? menPick : womenPick),
+      ...FEED,
+      targetAudience: "Частные лица",
+      address: "Москва, ул. Пушкина, 1",
+    });
+    // Общие на фид → по тегу на каждый из двух <Ad>.
+    expect(withExtras.match(/<TargetAudience>/g)?.length).toBe(2);
+    expect(withExtras.match(/<Address>/g)?.length).toBe(2);
+
+    const without = await renderAvito(products, {
+      resolveProduct: (p) => (p.productId === 1 ? menPick : womenPick),
+      ...FEED,
+    });
+    expect(without).not.toContain("<TargetAudience>");
+    expect(without).not.toContain("<Address>");
+  });
+
+  it("skips product with reason 'unresolved' when resolveProduct returns null", async () => {
+    const { errors, onProductError } = collectErrors();
+    const result = await renderAvito(
+      [validProduct({ productId: 5, variantId: "5" })],
+      { resolveProduct: () => null, ...FEED, onProductError },
+    );
+    expect(result).not.toContain("<Ad>");
+    expect(errors).toHaveLength(1);
+    expect(errors[0].productId).toBe(5);
+    const err = errors[0].errors.find((e) => e.field === "TemplateId");
+    expect(err?.reason).toBe("unresolved");
+  });
+
+  it("reports 'unknown_template' when resolver returns a templateId outside the registry", async () => {
+    const { errors, onProductError } = collectErrors();
+    const result = await renderAvito([validProduct()], {
+      resolveProduct: () => ({
+        templateId: unsafeTemplateId(99999),
+        condition: baseOptions.condition,
+      }),
+      ...FEED,
+      onProductError,
+    });
+    expect(result).not.toContain("<Ad>");
+    const err = errors[0].errors.find((e) => e.field === "TemplateId");
+    expect(err?.reason).toBe("unknown_template");
+  });
+
+  it("skips one product on invalid condition WITHOUT throwing the whole feed", async () => {
+    // condition — единственный enum, который резолвер задаёт сам; кривое
+    // значение отбраковывает один товар (per-product), а не роняет весь фид.
+    const { errors, onProductError } = collectErrors();
+    const result = await renderAvito([validProduct()], {
+      resolveProduct: () => ({ templateId: 100368, condition: "Новое" }),
+      ...FEED,
+      onProductError,
+    });
+    expect(result).not.toContain("<Ad>");
+    const err = errors[0].errors.find((e) => e.field === "Condition");
+    expect(err?.reason).toBe("invalid_enum");
+    expect(err?.expected).toEqual(SCHEMA_100368.conditionValues);
+  });
+
+  it("validates per-product Size against the RESOLVED template dictionary (not any/global)", async () => {
+    // Берём размер, валидный для МУЖСКОГО шаблона, но отсутствующий в ЖЕНСКОМ,
+    // и резолвим товар в ЖЕНСКИЙ 100388. Если бы валидация шла против чужой/
+    // глобальной схемы — size прошёл бы. Отбраковка по словарю 100388 и есть
+    // доказательство, что проверка привязана к resolved-templateId.
+    const menSizes = SCHEMA_100368.sizeValues ?? [];
+    const womenSizes = SCHEMA_100388.sizeValues ?? [];
+    const menOnlySize = menSizes.find((s) => !womenSizes.includes(s));
+    expect(menOnlySize).toBeDefined();
+
+    const { errors, onProductError } = collectErrors();
+    const product = validProduct({
+      params: [
+        { key: "Size", value: menOnlySize ?? "" },
+        { key: "Color", value: "Белый" },
+        { key: "ColorName", value: "Молочный" },
+      ],
+    });
+    await renderAvito([product], {
+      resolveProduct: () => womenPick,
+      ...FEED,
+      onProductError,
+    });
+    const sizeErr = errors[0].errors.find((e) => e.field === "Size");
+    expect(sizeErr?.reason).toBe("invalid_enum");
+    expect(sizeErr?.expected).toEqual(SCHEMA_100388.sizeValues);
+  });
+
+  it("keeps the valid ad from one template and drops the invalid one from another", async () => {
+    const { errors, onProductError } = collectErrors();
+    const men = productFor(SCHEMA_100368, { productId: 1, variantId: "1" });
+    // женский товар с US-размером 10 (нет в женском словаре) → выпадает
+    const womenBad = validProduct({
+      productId: 2,
+      variantId: "2",
+      params: [
+        { key: "Size", value: "10" },
+        { key: "Color", value: "Чёрный" },
+        { key: "ColorName", value: "Угольный" },
+      ],
+    });
+    const result = await renderAvito([men, womenBad], {
+      resolveProduct: (p) => (p.productId === 1 ? menPick : womenPick),
+      ...FEED,
+      onProductError,
+    });
+    expect(result.match(/<Ad>/g)?.length).toBe(1);
+    expect(result).toContain("<Id>1-1</Id>");
+    expect(result).not.toContain("<Id>2-2</Id>");
+    expect(errors.map((e) => e.productId)).toEqual([2]);
+  });
+
+  it("failOnError=true aborts the feed on the first unresolved product", async () => {
+    await expect(
+      renderAvito([validProduct({ productId: 1, variantId: "1" })], {
+        resolveProduct: () => null,
+        ...FEED,
+        failOnError: true,
+      }),
+    ).rejects.toThrow(/failOnError=true/);
+  });
+});

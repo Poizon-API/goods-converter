@@ -17,11 +17,12 @@ import {
   AVITO_PRICE_LIMITS,
   isOneOf,
   type AvitoCategorySchema,
-  type AvitoProductError,
   type AvitoValidationError,
 } from "./shared";
 import { TEMPLATE_REGISTRY } from "./templates";
 import {
+  type AvitoAdClassification,
+  type AvitoSingleTemplateOptions,
   type AvitoSneakersFormatterOptions,
   type AvitoTextOverflowPolicy,
 } from "./types";
@@ -65,6 +66,19 @@ type ImagesResult =
   | { kind: "empty_array" }
   | { kind: "invalid_url" };
 
+interface ResolvedClassification {
+  ok: true;
+  classification: AvitoAdClassification;
+  schema: AvitoCategorySchema;
+}
+
+interface RejectedClassification {
+  ok: false;
+  errors: AvitoValidationError[];
+}
+
+type ClassificationResult = ResolvedClassification | RejectedClassification;
+
 /**
  * Проверяет, что значение представимо как валидный сегмент Avito `<Id>`. Для
  * number'ов дополнительно требуем positive integer — иначе ноль/отрицательные/
@@ -95,17 +109,24 @@ export class AvitoFormatter implements FormatterAbstract {
     if (!avitoOptions) {
       throw new Error(
         "AvitoFormatter requires `options.avito` with category/goodsType/" +
-          "condition/adType/apparelType",
+          "condition/adType/apparelType (либо resolveProduct для multi-template)",
       );
     }
-    const schema = TEMPLATE_REGISTRY[avitoOptions.templateId];
-    if (!schema) {
-      throw new Error(
-        `AvitoFormatter: templateId=${avitoOptions.templateId} не поддерживается. ` +
-          `Доступные: ${Object.keys(TEMPLATE_REGISTRY).join(", ")}`,
-      );
+    // Single-template режим: классификация общая для всех товаров, значит
+    // невалидную опцию ловим upfront throw'ом (мисконфигурация всего фида —
+    // fail-fast). Multi-template режим (resolveProduct задан): классификация
+    // резолвится per-product, валидировать upfront нечего — enum'ы и templateId
+    // проверяются в loop'е через resolveAdClassification.
+    if (avitoOptions.resolveProduct === undefined) {
+      const schema = TEMPLATE_REGISTRY[avitoOptions.templateId];
+      if (!schema) {
+        throw new Error(
+          `AvitoFormatter: templateId=${avitoOptions.templateId} не поддерживается. ` +
+            `Доступные: ${Object.keys(TEMPLATE_REGISTRY).join(", ")}`,
+        );
+      }
+      this.validateOptions(avitoOptions, schema);
     }
-    this.validateOptions(avitoOptions, schema);
 
     const result = new PassThrough();
     result.pipe(writableStream);
@@ -120,34 +141,48 @@ export class AvitoFormatter implements FormatterAbstract {
 
     const resultWriter = writeWithDrain(result);
 
+    // Единый путь репорта ошибок товара (классификация + валидация полей):
+    // дёргаем onProductError и, при failOnError, аварийно закрываем downstream.
+    // Без destroy() pipe (S3 / fs.WriteStream) успевает корректно закрыть
+    // destination с partial-feed'ом ДО того, как promise format() отклонится —
+    // consumer считает upload удачным. Node pipe по умолчанию НЕ пробрасывает
+    // 'error' с source, поэтому делаем explicit: отвязываем pipe, кидаем
+    // 'error' в writableStream и убиваем внутренний PassThrough (свою ошибку
+    // выбросим throw'ом ниже).
+    const reportProductErrors = (
+      productId: number,
+      errors: AvitoValidationError[],
+    ): void => {
+      avitoOptions.onProductError?.({ productId, errors });
+      if (avitoOptions.failOnError) {
+        const err = new Error(
+          `AvitoFormatter: товар productId=${productId} ` +
+            `не прошёл валидацию (failOnError=true)`,
+        );
+        result.unpipe(writableStream);
+        writableStream.destroy(err);
+        result.destroy();
+        throw err;
+      }
+    };
+
     await resultWriter('<?xml version="1.0" encoding="UTF-8"?>\n');
     await resultWriter('<Ads formatVersion="3" target="Avito.ru">\n');
 
     for (const product of products) {
-      const built = this.buildAd(product, avitoOptions, schema);
+      const resolved = this.resolveAdClassification(product, avitoOptions);
+      if (!resolved.ok) {
+        reportProductErrors(product.productId, resolved.errors);
+        continue;
+      }
+      const built = this.buildAd(
+        product,
+        resolved.classification,
+        resolved.schema,
+        avitoOptions,
+      );
       if (built.errors.length > 0) {
-        const event: AvitoProductError = {
-          productId: product.productId,
-          errors: built.errors,
-        };
-        avitoOptions.onProductError?.(event);
-        if (avitoOptions.failOnError) {
-          // Без destroy() pipe (S3 / fs.WriteStream) успевает корректно
-          // закрыть destination с partial-feed'ом ДО того, как promise
-          // format() отклонится — consumer считает upload удачным. Node
-          // pipe по умолчанию НЕ пробрасывает 'error' с source, поэтому
-          // делаем explicit: отвязываем pipe, кидаем 'error' в
-          // writableStream и убиваем внутренний PassThrough без ошибки
-          // (свою уже выбросим throw'ом ниже).
-          const err = new Error(
-            `AvitoFormatter: товар productId=${product.productId} ` +
-              `не прошёл валидацию (failOnError=true)`,
-          );
-          result.unpipe(writableStream);
-          writableStream.destroy(err);
-          result.destroy();
-          throw err;
-        }
+        reportProductErrors(product.productId, built.errors);
         continue;
       }
       await resultWriter(this.indent(builder.build({ Ad: built.ad })) + "\n");
@@ -167,7 +202,7 @@ export class AvitoFormatter implements FormatterAbstract {
   }
 
   private validateOptions(
-    options: AvitoSneakersFormatterOptions,
+    options: AvitoSingleTemplateOptions,
     schema: AvitoCategorySchema,
   ): void {
     if (!options.category?.trim()) {
@@ -213,10 +248,143 @@ export class AvitoFormatter implements FormatterAbstract {
     }
   }
 
-  private buildAd(
+  /**
+   * Резолвит category-level классификацию и schema товара для обоих режимов.
+   *
+   *  - single-template: классификация — это сами опции (уже провалидированы
+   *    upfront в `format()`), schema гарантированно есть в `TEMPLATE_REGISTRY`.
+   *  - multi-template: `resolveProduct` даёт per-product часть (templateId +
+   *    condition), остальное собирается из общих опций и схемы. `null` →
+   *    `unresolved` (товар без поддерживаемого шаблона выпадает из фида).
+   *    Невалидный templateId → `unknown_template`. Кривой enum классификации
+   *    (condition и т.п.) → per-product `invalid_enum`. В отличие от single-режима
+   *    НЕ роняем весь фид — один товар с битой классификацией пропускается и
+   *    репортится.
+   */
+  private resolveAdClassification(
     product: Product,
     options: AvitoSneakersFormatterOptions,
+  ): ClassificationResult {
+    if (options.resolveProduct === undefined) {
+      // Single-template: опции и есть классификация; schema из Record по
+      // SupportedTemplateId всегда определена (валидировано в format()).
+      return {
+        ok: true,
+        classification: options,
+        schema: TEMPLATE_REGISTRY[options.templateId],
+      };
+    }
+
+    const picked = options.resolveProduct(product);
+    if (picked == null) {
+      return {
+        ok: false,
+        errors: [{ field: "TemplateId", value: null, reason: "unresolved" }],
+      };
+    }
+    // Guard рантаймовый: тип templateId (SupportedTemplateId) делает его на вид
+    // «недостижимым», но резолвер может вернуть id вне реестра (внешние данные).
+    const schema = TEMPLATE_REGISTRY[picked.templateId];
+    if (!schema) {
+      return {
+        ok: false,
+        errors: [
+          {
+            field: "TemplateId",
+            value: picked.templateId,
+            reason: "unknown_template",
+          },
+        ],
+      };
+    }
+    // Собираем полную классификацию `<Ad>` из трёх источников: per-product от
+    // резолвера (templateId, condition), общие для фида опции (category, adType,
+    // …) и выведенные из шаблона goodsType/apparelType — у leaf-шаблона они
+    // единственные (`*Values[0]`), поэтому их незачем требовать от caller'а.
+    const classification: AvitoAdClassification = {
+      templateId: picked.templateId,
+      category: options.category,
+      goodsType: schema.goodsTypeValues[0],
+      condition: picked.condition,
+      adType: options.adType,
+      apparelType: schema.apparelTypeValues[0],
+      targetAudience: options.targetAudience,
+      address: options.address,
+    };
+    const errors = this.collectClassificationErrors(classification, schema);
+    if (errors.length > 0) return { ok: false, errors };
+    return { ok: true, classification, schema };
+  }
+
+  /**
+   * Per-product вариант `validateOptions`: собирает ошибки классификации в
+   * массив (а не throw'ит), чтобы в multi-template режиме битый товар выпадал
+   * из фида через `onProductError`, не роняя остальные. Набор проверок тот же,
+   * что у `validateOptions` (category non-empty + enum'ы из schema).
+   */
+  private collectClassificationErrors(
+    classification: AvitoAdClassification,
     schema: AvitoCategorySchema,
+  ): AvitoValidationError[] {
+    const errors: AvitoValidationError[] = [];
+    if (!classification.category?.trim()) {
+      errors.push({
+        field: "Category",
+        value: classification.category,
+        reason: "missing",
+      });
+    }
+    this.pushEnumError(
+      "GoodsType",
+      classification.goodsType,
+      schema.goodsTypeValues,
+      errors,
+    );
+    this.pushEnumError(
+      "Condition",
+      classification.condition,
+      schema.conditionValues,
+      errors,
+    );
+    this.pushEnumError(
+      "AdType",
+      classification.adType,
+      schema.adTypeValues,
+      errors,
+    );
+    this.pushEnumError(
+      "ApparelType",
+      classification.apparelType,
+      schema.apparelTypeValues,
+      errors,
+    );
+    if (classification.targetAudience !== undefined) {
+      this.pushEnumError(
+        "TargetAudience",
+        classification.targetAudience,
+        schema.targetAudienceValues,
+        errors,
+      );
+    }
+    return errors;
+  }
+
+  private pushEnumError(
+    field: AvitoValidationError["field"],
+    value: string,
+    allowed: readonly string[],
+    errors: AvitoValidationError[],
+  ): void {
+    if (!isOneOf(value, allowed)) {
+      errors.push({ field, value, reason: "invalid_enum", expected: allowed });
+    }
+  }
+
+  private buildAd(
+    product: Product,
+    classification: AvitoAdClassification,
+    schema: AvitoCategorySchema,
+    options: AvitoSneakersFormatterOptions,
   ): { ad: AvitoAd; errors: AvitoValidationError[] } {
     const errors: AvitoValidationError[] = [];
     const paramIndex = this.buildParamIndex(product);
@@ -332,24 +500,24 @@ export class AvitoFormatter implements FormatterAbstract {
       Id: id,
       Title: title,
       Description: { __cdata: this.getSafeCdata(description) },
-      Category: options.category,
+      Category: classification.category,
       Price: price,
       Images: imagesResult.kind === "ok" ? imagesResult.images : { Image: [] },
-      GoodsType: options.goodsType,
-      Condition: options.condition,
-      AdType: options.adType,
+      GoodsType: classification.goodsType,
+      Condition: classification.condition,
+      AdType: classification.adType,
       Brand: brand,
       Color: rawColor,
       ColorName: colorName,
-      ApparelType: options.apparelType,
+      ApparelType: classification.apparelType,
       Size: size ?? "",
     };
 
-    if (options.targetAudience) {
-      ad.TargetAudience = options.targetAudience;
+    if (classification.targetAudience) {
+      ad.TargetAudience = classification.targetAudience;
     }
-    if (options.address) {
-      ad.Address = options.address;
+    if (classification.address) {
+      ad.Address = classification.address;
     }
 
     return { ad, errors };

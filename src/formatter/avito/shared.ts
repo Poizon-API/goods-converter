@@ -32,7 +32,9 @@ export type AvitoValidationReason =
   | "too_long"
   | "out_of_range"
   | "invalid_url"
-  | "empty_array";
+  | "empty_array"
+  | "unresolved"
+  | "unknown_template";
 
 export type AvitoValidationField =
   | "Id"
@@ -43,7 +45,14 @@ export type AvitoValidationField =
   | "Brand"
   | "Color"
   | "ColorName"
-  | "Size";
+  | "Size"
+  | "TemplateId"
+  | "Category"
+  | "GoodsType"
+  | "Condition"
+  | "AdType"
+  | "ApparelType"
+  | "TargetAudience";
 
 export interface AvitoValidationError {
   field: AvitoValidationField;

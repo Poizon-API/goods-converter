@@ -16,6 +16,7 @@ import {
   AVITO_ID_PART_PATTERN,
   AVITO_PRICE_LIMITS,
   isOneOf,
+  resolveAvitoSize,
   type AvitoCategorySchema,
   type AvitoValidationError,
 } from "./shared";
@@ -480,7 +481,11 @@ export class AvitoFormatter implements FormatterAbstract {
     // Avito ждёт `36,5` (запятая), а адаптеры/каталоги обычно отдают `36.5`
     // (точка). Нормализуем replaceAll, чтобы мусорный multi-dot ('38.5.5') не
     // протёк дальше с частично-заменённой точкой.
-    const size = rawSize?.replaceAll(".", ",");
+    const normalizedSize = rawSize?.replaceAll(".", ",");
+    const size =
+      normalizedSize !== undefined
+        ? resolveAvitoSize(normalizedSize, schema.sizeValues ?? [])
+        : undefined;
     if (!size) {
       errors.push({ field: "Size", value: size, reason: "missing" });
     } else if (

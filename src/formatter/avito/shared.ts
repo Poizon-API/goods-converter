@@ -79,6 +79,32 @@ export function isOneOf<T extends string>(
   return list.some((allowed) => allowed === value);
 }
 
+const AVITO_SIZE_PLUS_BUCKET = /^\d+(?:,\d+)?\+$/u;
+
+function parseAvitoSize(size: string): number | undefined {
+  const numeric = Number.parseFloat(size.replace(",", "."));
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+export function resolveAvitoSize(
+  size: string,
+  sizeValues: readonly string[],
+): string {
+  if (sizeValues.length === 0 || isOneOf(size, sizeValues)) return size;
+  const bucket = sizeValues.find((value) => AVITO_SIZE_PLUS_BUCKET.test(value));
+  if (bucket === undefined) return size;
+  const threshold = parseAvitoSize(bucket);
+  const sizeNumber = parseAvitoSize(size);
+  if (
+    threshold === undefined ||
+    sizeNumber === undefined ||
+    sizeNumber < threshold
+  ) {
+    return size;
+  }
+  return bucket;
+}
+
 /**
  * Per-template схема Avito autoload-категории. Каждый template (100368,
  * 100388, …) имеет свой набор enum-значений и required-полей; они снимаются

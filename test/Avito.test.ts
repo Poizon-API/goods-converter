@@ -1139,32 +1139,58 @@ describe("AvitoFormatter multi-template (resolveProduct)", () => {
     expect(err?.expected).toEqual(SCHEMA_100368.conditionValues);
   });
 
-  it("validates per-product Size against the RESOLVED template dictionary (not any/global)", async () => {
-    // Берём размер, валидный для МУЖСКОГО шаблона, но отсутствующий в ЖЕНСКОМ,
-    // и резолвим товар в ЖЕНСКИЙ 100388. Если бы валидация шла против чужой/
-    // глобальной схемы — size прошёл бы. Отбраковка по словарю 100388 и есть
-    // доказательство, что проверка привязана к resolved-templateId.
+  const plusBucketOf = (sizes: readonly string[]): string | undefined =>
+    sizes.find((s) => /\+$/u.test(s));
+
+  it("snaps an oversized Size into the RESOLVED template's top +bucket", async () => {
     const menSizes = SCHEMA_100368.sizeValues ?? [];
     const womenSizes = SCHEMA_100388.sizeValues ?? [];
-    const menOnlySize = menSizes.find((s) => !womenSizes.includes(s));
-    expect(menOnlySize).toBeDefined();
+    const womenBucket = plusBucketOf(womenSizes);
+    const oversized = plusBucketOf(menSizes);
+    expect(womenBucket).toBeDefined();
+    expect(oversized).toBeDefined();
+    expect(womenSizes).not.toContain(oversized);
 
     const { errors, onProductError } = collectErrors();
     const product = validProduct({
       params: [
-        { key: "Size", value: menOnlySize ?? "" },
+        { key: "Size", value: oversized ?? "" },
+        { key: "Color", value: "Белый" },
+        { key: "ColorName", value: "Молочный" },
+      ],
+    });
+    const result = await renderAvito([product], {
+      resolveProduct: () => womenPick,
+      ...FEED,
+      onProductError,
+    });
+    expect(errors).toHaveLength(0);
+    expect(result).toContain(`<Size>${womenBucket}</Size>`);
+  });
+
+  it("still rejects a Size outside the RESOLVED template dictionary when it cannot snap", async () => {
+    const menSizes = SCHEMA_100368.sizeValues ?? [];
+    const womenSizes = SCHEMA_100388.sizeValues ?? [];
+    const belowMenGrid = womenSizes.find((s) => !menSizes.includes(s));
+    expect(belowMenGrid).toBeDefined();
+    expect(menSizes).not.toContain(belowMenGrid);
+
+    const { errors, onProductError } = collectErrors();
+    const product = validProduct({
+      params: [
+        { key: "Size", value: belowMenGrid ?? "" },
         { key: "Color", value: "Белый" },
         { key: "ColorName", value: "Молочный" },
       ],
     });
     await renderAvito([product], {
-      resolveProduct: () => womenPick,
+      resolveProduct: () => menPick,
       ...FEED,
       onProductError,
     });
     const sizeErr = errors[0].errors.find((e) => e.field === "Size");
     expect(sizeErr?.reason).toBe("invalid_enum");
-    expect(sizeErr?.expected).toEqual(SCHEMA_100388.sizeValues);
+    expect(sizeErr?.expected).toEqual(SCHEMA_100368.sizeValues);
   });
 
   it("keeps the valid ad from one template and drops the invalid one from another", async () => {

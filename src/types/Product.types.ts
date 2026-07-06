@@ -543,6 +543,7 @@ export interface IParam {
    * **Значение**
    */
   value: string;
+  id?: number;
 }
 
 export interface ISize {
